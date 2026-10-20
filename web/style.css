@@ -327,8 +327,10 @@ body {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  /* 额外功能可能不止一屏（助手只在暗黑3 出现），允许纵向滚动而不是把内容裁掉 */
+  /* 额外功能可能不止一屏（助手只在暗黑3 出现），允许纵向滚动而不是把内容裁掉。
+     必须显式关掉横向滚动：只设 overflow-y 时，溢出内容会让浏览器在横轴也出滚动条。 */
   overflow-y: auto;
+  overflow-x: hidden;
   padding-right: 2px;
 }
 
@@ -596,19 +598,19 @@ body {
 .select-dropdown.md { width: 114px; }
 .select-dropdown.lg { width: 148px; }
 
-/* 额外设置卡片 */
-.extra-card {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.extra-row {
+/* 配置名与删除：并进表格卡片顶部，省掉一整张「本配置」卡片 */
+.profile-meta {
   display: flex;
   align-items: center;
-  gap: 12px;
-  flex-wrap: nowrap;
-  white-space: nowrap;
+  gap: 6px;
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--border-main);
+}
+
+.profile-meta .input-text {
+  flex: 1;
+  min-width: 90px;
 }
 
 .form-item {
@@ -665,6 +667,8 @@ body {
   display: flex;
   flex-direction: column;
   gap: 9px;
+  /* flex 子项默认 min-width:auto，内容一宽就把卡片撑出容器，逼出横向滚动条 */
+  min-width: 0;
 }
 
 .helper-controls {
@@ -672,7 +676,7 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  white-space: nowrap;
+  flex-wrap: wrap;
 }
 
 #helperSpeedSelect {
@@ -705,7 +709,8 @@ body {
 .helper-note {
   font-size: 11px;
   color: #b48535;
-  white-space: nowrap;
+  line-height: 1.5;
+  white-space: normal;
 }
 
 .pref-card {
@@ -884,8 +889,9 @@ body {
 
 /* ================= 槽位说明与轻量提示 ================= */
 .card-hints {
-  margin-top: 8px;
-  padding-top: 6px;
+  /* 表格卡片会撑满左栏（没有「本配置」卡片了），说明贴底放，别在中间留一块空白 */
+  margin-top: auto;
+  padding-top: 8px;
   border-top: 1px solid var(--border-sub);
   display: flex;
   flex-direction: column;

@@ -57,6 +57,14 @@
         </label>
         <button class="keycap-btn sm" id="forceStandKeyBtn" onclick="captureForceStandKey()">Shift</button>
       </div>
+      <div class="form-item">
+        <span class="form-label">模式：</span>
+        <select class="select-dropdown md" id="profileModeSelect" onchange="saveProfileMode()"
+          title="按键模式：并发=各技能各自计时、到点就按；循环=按槽位顺序一轮一轮按。属于当前标签的配置，切换标签会跟着变">
+          <option value="con">并发按键</option>
+          <option value="seq">循环按键</option>
+        </select>
+      </div>
     </div>
 
     <!-- 第二行：悬浮窗显示方式 -->
@@ -111,6 +119,15 @@
         <div class="profile-tabs" id="profileTabs"></div>
 
         <div class="card macro-card">
+          <!-- 配置名与删除：并入表格卡片顶部，不再单独占一张「本配置」卡片 -->
+          <div class="profile-meta">
+            <span class="form-label">配置名：</span>
+            <input type="text" class="input-text md" id="profileNameInput" onchange="saveProfileName()"
+              maxlength="24" placeholder="配置 1" title="标签上显示的就是这个名字">
+            <button class="tool-btn xs danger" id="deleteProfileBtn" onclick="deleteProfile()"
+              title="删除当前配置（需二次确认）">删除</button>
+          </div>
+
           <div class="slot-header">
             <span class="col-slot">技能槽位</span>
             <span class="col-key">快捷键</span>
@@ -130,26 +147,6 @@
         </div>
       </div>
 
-      <!-- 本配置（方案级）设置 -->
-      <div class="card extra-card">
-        <div class="card-title">本配置</div>
-        <div class="extra-row">
-          <div class="form-item">
-            <span class="form-label">名称：</span>
-            <input type="text" class="input-text sm" id="profileNameInput" onchange="saveProfileName()" maxlength="24" placeholder="配置 1">
-            <button class="tool-btn xs danger" id="deleteProfileBtn" onclick="deleteProfile()"
-              title="删除当前配置（需二次确认）">删除</button>
-          </div>
-          <div class="form-item">
-            <span class="form-label">按键模式：</span>
-            <select class="select-dropdown md" id="profileModeSelect" onchange="saveProfileMode()"
-              title="并发按键：各技能各自计时、到点就按；循环按键：按槽位顺序一轮一轮按">
-              <option value="con">并发按键</option>
-              <option value="seq">循环按键</option>
-            </select>
-          </div>
-        </div>
-      </div>
     </section>
 
     <!-- 右栏：额外功能（目前只有暗黑3 的城镇助手） -->
