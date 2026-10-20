@@ -80,8 +80,8 @@ func TestResolveCapturedKeyPerMode(t *testing.T) {
 			t.Errorf("%s 应当接受鼠标键：%v", mode, err)
 		}
 	}
-	// 方案切换键与强制站立键只能是键盘键（协议禁止鼠标键做切换键）
-	for _, mode := range []captureMode{captureProfileHK, captureForceStand, captureHelperKey} {
+	// 强制站立键与助手快捷键只能是键盘键
+	for _, mode := range []captureMode{captureForceStand, captureHelperKey} {
 		_, err := resolveCapturedKey(mode, "X1")
 		if err == nil {
 			t.Fatalf("%s 不应接受鼠标键", mode)
@@ -92,7 +92,7 @@ func TestResolveCapturedKeyPerMode(t *testing.T) {
 	}
 
 	// 清除语义：只有允许清除的目标才接受空输入
-	for _, mode := range []captureMode{captureProfileHK, captureForceStand, captureHelperKey} {
+	for _, mode := range []captureMode{captureForceStand, captureHelperKey} {
 		if token, err := resolveCapturedKey(mode, ""); err != nil || token != "" {
 			t.Errorf("%s 应当允许清除：token=%q err=%v", mode, token, err)
 		}
@@ -103,7 +103,7 @@ func TestResolveCapturedKeyPerMode(t *testing.T) {
 }
 
 func TestCaptureOptionsMatchRules(t *testing.T) {
-	modes := []captureMode{captureSlot, captureToggle, captureProfileHK, captureForceStand, captureHelperKey}
+	modes := []captureMode{captureSlot, captureToggle, captureForceStand, captureHelperKey}
 	for _, mode := range modes {
 		opts := captureOptionsFor(mode)
 		if opts.Title == "" {

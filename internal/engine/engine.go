@@ -227,16 +227,6 @@ func (e *Engine) ProfileName(i int) string {
 	return e.cfg.Profiles[i].Name
 }
 
-// SwitchVK 返回指定方案的切换键；0 表示该方案未设置切换键。序号必须合法（Fail Fast）。
-func (e *Engine) SwitchVK(i int) uint16 {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	if i < 0 || i >= len(e.cfg.Profiles) {
-		panic(fmt.Sprintf("engine: 方案序号越界：%d", i))
-	}
-	return e.cfg.Profiles[i].SwitchVK
-}
-
 // SetProfile 切换方案：先释放旧方案按住中的键，再装载新方案。
 func (e *Engine) SetProfile(i int) error {
 	e.mu.Lock()

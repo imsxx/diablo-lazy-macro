@@ -161,11 +161,9 @@ type frontendSlot struct {
 }
 
 type frontendProfile struct {
-	Name    string         `json:"name"`
-	HK      string         `json:"hk"`
-	HKLabel string         `json:"hkLabel"`
-	Mode    string         `json:"mode"`
-	Slots   []frontendSlot `json:"slots"`
+	Name  string         `json:"name"`
+	Mode  string         `json:"mode"`
+	Slots []frontendSlot `json:"slots"`
 }
 
 type helperMeta struct {
@@ -244,7 +242,6 @@ type mainWindow struct {
 	// 界面只下发与提交前 profileCount 个，其余的数组槽位不可见、也不写进存档。
 	profileSlots [maxProfiles][numSlots]skillSlotData
 	profileNames [maxProfiles]string
-	profileHKs   [maxProfiles]string
 	profileModes [maxProfiles]string
 	profileCount int
 	startMode    int
@@ -576,7 +573,7 @@ func (w *mainWindow) initBindings() {
 		return w.commitOrRollback(func() { *slot = prev })
 	})
 
-	bind("api_updateProfileMeta", func(tabIdx int, name, hk, mode string) error {
+	bind("api_updateProfileMeta", func(tabIdx int, name, mode string) error {
 		if tabIdx < 0 || tabIdx >= w.profileCount {
 			return fmt.Errorf("方案序号 %d 超出范围", tabIdx)
 		}
@@ -587,28 +584,16 @@ func (w *mainWindow) initBindings() {
 		if utf8.RuneCountInString(name) > maxNameRunesUI {
 			return fmt.Errorf("配置名最长 %d 个字符", maxNameRunesUI)
 		}
-		hk = strings.ToUpper(strings.TrimSpace(hk))
-		if hk != "" {
-			vk, err := keys.Parse(hk)
-			if err != nil {
-				return fmt.Errorf("方案切换键无效：%v", err)
-			}
-			if keys.IsMouse(vk) {
-				return fmt.Errorf("方案切换键不支持鼠标键（%s），请改用键盘键", keyName(vk))
-			}
-		}
 		mode = strings.TrimSpace(mode)
 		if mode != config.ModeConcurrent && mode != config.ModeSequential {
 			return fmt.Errorf("按键模式 %q 无效", mode)
 		}
 
-		prevName, prevHK, prevMode := w.profileNames[tabIdx], w.profileHKs[tabIdx], w.profileModes[tabIdx]
+		prevName, prevMode := w.profileNames[tabIdx], w.profileModes[tabIdx]
 		w.profileNames[tabIdx] = name
-		w.profileHKs[tabIdx] = hk
 		w.profileModes[tabIdx] = mode
 		return w.commitOrRollback(func() {
 			w.profileNames[tabIdx] = prevName
-			w.profileHKs[tabIdx] = prevHK
 			w.profileModes[tabIdx] = prevMode
 		})
 	})
@@ -623,11 +608,10 @@ func (w *mainWindow) initBindings() {
 		idx := w.profileCount
 		prevCount, prevIdx := w.profileCount, w.profileIdx
 		prevSlots := w.profileSlots[idx]
-		prevName, prevHK, prevMode := w.profileNames[idx], w.profileHKs[idx], w.profileModes[idx]
+		prevName, prevMode := w.profileNames[idx], w.profileModes[idx]
 
 		w.profileSlots[idx] = defaultSlots()
 		w.profileNames[idx] = fmt.Sprintf("配置 %d", idx+1)
-		w.profileHKs[idx] = ""
 		w.profileModes[idx] = config.ModeConcurrent
 		w.profileCount = idx + 1
 		w.profileIdx = idx
@@ -635,7 +619,7 @@ func (w *mainWindow) initBindings() {
 		err := w.commitOrRollback(func() {
 			w.profileCount, w.profileIdx = prevCount, prevIdx
 			w.profileSlots[idx] = prevSlots
-			w.profileNames[idx], w.profileHKs[idx], w.profileModes[idx] = prevName, prevHK, prevMode
+			w.profileNames[idx], w.profileModes[idx] = prevName, prevMode
 		})
 		if err != nil {
 			return 0, err
@@ -654,26 +638,24 @@ func (w *mainWindow) initBindings() {
 			return fmt.Errorf("至少要保留 1 个配置")
 		}
 		prevSlots, prevNames := w.profileSlots, w.profileNames
-		prevHKs, prevModes := w.profileHKs, w.profileModes
+		prevModes := w.profileModes
 		prevCount, prevIdx := w.profileCount, w.profileIdx
 
 		for i := idx; i < w.profileCount-1; i++ {
 			w.profileSlots[i] = w.profileSlots[i+1]
 			w.profileNames[i] = w.profileNames[i+1]
-			w.profileHKs[i] = w.profileHKs[i+1]
 			w.profileModes[i] = w.profileModes[i+1]
 		}
 		last := w.profileCount - 1
 		w.profileSlots[last] = defaultSlots()
 		w.profileNames[last] = ""
-		w.profileHKs[last] = ""
 		w.profileModes[last] = ""
 		w.profileCount = last
 		w.profileIdx = activeAfterDelete(prevIdx, idx)
 
 		err := w.commitOrRollback(func() {
 			w.profileSlots, w.profileNames = prevSlots, prevNames
-			w.profileHKs, w.profileModes = prevHKs, prevModes
+			w.profileModes = prevModes
 			w.profileCount, w.profileIdx = prevCount, prevIdx
 		})
 		if err != nil {
@@ -982,11 +964,9 @@ func (w *mainWindow) buildFrontendState() *frontendState {
 			}
 		}
 		s.Profiles[t] = frontendProfile{
-			Name:    w.profileNames[t],
-			HK:      w.profileHKs[t],
-			HKLabel: keyNameOfToken(w.profileHKs[t]),
-			Mode:    w.profileModes[t],
-			Slots:   slots,
+			Name:  w.profileNames[t],
+			Mode:  w.profileModes[t],
+			Slots: slots,
 		}
 	}
 
@@ -1103,7 +1083,6 @@ func (w *mainWindow) loadFromState() {
 		if w.profileNames[i] == "" {
 			w.profileNames[i] = fmt.Sprintf("配置 %d", i+1)
 		}
-		w.profileHKs[i] = p.HK
 		w.profileModes[i] = p.Mode
 	}
 
@@ -1158,7 +1137,7 @@ func (w *mainWindow) saveToState() error {
 		if name == "" {
 			name = fmt.Sprintf("配置 %d", i+1)
 		}
-		profs[i] = slotsToProfile(w.profileSlots[i], name, w.profileHKs[i], w.profileModes[i])
+		profs[i] = slotsToProfile(w.profileSlots[i], name, w.profileModes[i])
 	}
 
 	w.raw.Version = config.Version
@@ -1234,7 +1213,7 @@ func (w *mainWindow) buildShareCode() (string, error) {
 		if name == "" {
 			name = fmt.Sprintf("配置 %d", i+1)
 		}
-		profs[i] = slotsToProfile(w.profileSlots[i], name, w.profileHKs[i], w.profileModes[i])
+		profs[i] = slotsToProfile(w.profileSlots[i], name, w.profileModes[i])
 	}
 	w.raw.Profiles = profs
 	return config.Encode(w.raw)
@@ -1384,7 +1363,7 @@ func clampInt(v, lo, hi, fallback int) int {
 	return v
 }
 
-func slotsToProfile(slots [numSlots]skillSlotData, name string, switchKey string, mode string) config.RawProfile {
+func slotsToProfile(slots [numSlots]skillSlotData, name string, mode string) config.RawProfile {
 	rules := make([]config.RawRule, 0, numSlots)
 
 	for _, s := range slots {
@@ -1427,7 +1406,6 @@ func slotsToProfile(slots [numSlots]skillSlotData, name string, switchKey string
 	// 槽位全部禁用时就是空方案（协议 v4 起合法）：玩家还没填技能，不该顺手替他按一个键。
 	return config.RawProfile{
 		Name:  name,
-		HK:    switchKey,
 		Mode:  mode,
 		Rules: rules,
 	}

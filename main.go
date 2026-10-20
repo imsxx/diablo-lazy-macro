@@ -631,7 +631,6 @@ func (a *app) startTicker() {
 			prevToggle  bool
 			lastEnabled bool
 			lastProfile = -1
-			prevSwitch  []bool
 		)
 		for {
 			<-timer.C
@@ -665,23 +664,6 @@ func (a *app) startTicker() {
 					a.hud.update(snap, false)
 				}
 			} else {
-				// 方案切换键：任一方案的切换键被按下即切到该方案（全局生效，与前台无关）
-				if n := snap.Engine.ProfileCount(); n > 0 {
-					if len(prevSwitch) != n {
-						prevSwitch = make([]bool, n)
-					}
-					current := snap.Engine.ProfileIndex()
-					for i := 0; i < n; i++ {
-						vk := snap.Engine.SwitchVK(i)
-						down := vk != 0 && win32.KeyPressed(vk)
-						if down && !prevSwitch[i] && i != current {
-							idx := i
-							a.log.Printf("[热键] %s → 切换方案 %s", keyName(vk), profileDisplayName(snap.Engine, idx))
-							a.sync(func() { a.switchProfile(idx) })
-						}
-						prevSwitch[i] = down
-					}
-				}
 				// 智能暂停：聊天 / 开地图 / 回城时自动让路
 				a.tickSmartPause(snap)
 				// 助手功能（暗黑3）：按快捷键触发，运行中再按一次打断
@@ -1058,9 +1040,6 @@ func (a *app) describeConfig(raw *config.Raw, parsed *config.Parsed) string {
 		mark := ""
 		if i == 0 {
 			mark = "（默认启用）"
-		}
-		if prof.SwitchVK != 0 {
-			mark += "（切换键 " + keyName(prof.SwitchVK) + "）"
 		}
 		sb.WriteString(fmt.Sprintf("\n%s%s\n", name, mark))
 		for _, r := range prof.Rules {

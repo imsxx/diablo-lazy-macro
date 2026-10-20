@@ -1,16 +1,16 @@
-# 分享码协议 v5
+# 分享码协议 v6
 
-> 状态：**v5 定稿**（2026-10-20）。这是「工具」内生成与消费的**唯一交换格式**：作者在工具内导出，玩家从剪贴板粘贴导入。任何一方放宽校验都属于缺陷。
-> 向后兼容：工具仍可解析 **v1 / v2 / v3 / v4** 旧码与旧存档（旧码重新导出时自动升级为 v5）。
+> 状态：**v6 定稿**（2026-10-20）。这是「工具」内生成与消费的**唯一交换格式**：作者在工具内导出，玩家从剪贴板粘贴导入。任何一方放宽校验都属于缺陷。
+> 向后兼容：工具仍可解析 **v1–v5** 旧码与旧存档（旧码重新导出时自动升级为 v6）。
 > 设计取向：**配置门槛优先**。宏按轮循环触发，玩家不需要理解「重复次数」「优先级」这类内部机制——协议刻意不提供它们；反之，**玩家能直接感知的行为差异（如按键是顺序轮还是各自独立触发）才暴露**。
 
 ## 形式
 
 ```
-DLM5:eyJ2Ijo1LCJnIjoiZDMiLCJuIjoi5pqX6buRMyDpgJ_liLciLCJhIjoi5p-QQkTkvZzogIUiLCJ0ZyI6IlgxIiwicCI6W3sibiI6IumAn-WItyIsIm0iOiJzZXEiLCJyIjpbeyJ0ZyI6InQiLCJhIjoidGFwOjIiLCJpIjozMDAsInN0IjozfSx7InRnIjoidCIsImEiOiJob2xkOlJNQiJ9LHsidGciOiJ0IiwiYSI6InRhcDoxIiwiaSI6MTUwLCJzdCI6MiwiZCI6NDAsImRuIjoyfV19LHsibiI6IuaCrOi1jyIsImhrIjoiRjkiLCJyIjpbXX1dfQ
+DLM6:eyJ2Ijo2LCJnIjoiZDMiLCJuIjoi5pqX6buRMyDpgJ_liLciLCJhIjoi5p-QQkTkvZzogIUiLCJ0ZyI6IlgxIiwicCI6W3sibiI6IumAn-WItyIsIm0iOiJzZXEiLCJyIjpbeyJ0ZyI6InQiLCJhIjoidGFwOjIiLCJpIjozMDAsInN0IjozfSx7InRnIjoidCIsImEiOiJob2xkOlJNQiJ9LHsidGciOiJ0IiwiYSI6InRhcDoxIiwiaSI6MTUwLCJzdCI6MiwiZCI6NDAsImRuIjoyfV19LHsibiI6IuaCrOi1jyIsInIiOltdfV19
 ```
 
-- `DLM<版本>:` 为前缀（字母大小写不敏感）；v5 工具接受 `DLM1`–`DLM5`，前缀声明的版本必须与正文 `v` 一致
+- `DLM<版本>:` 为前缀（字母大小写不敏感）；v6 工具接受 `DLM1`–`DLM6`，前缀声明的版本必须与正文 `v` 一致
 - 其后是 **base64url 编码**（RFC 4648 §5，无 `=` 填充）的紧凑 JSON
 - 解析前先去掉前缀、剥离所有空白字符（换行/空格/制表符），因此聊天工具里被折行的码也能直接使用
 - 正文不含任何可执行内容；工具只读取白名单字段，绝不 eval
@@ -32,7 +32,7 @@ DLM5:eyJ2Ijo1LCJnIjoiZDMiLCJuIjoi5pqX6buRMyDpgJ_liLciLCJhIjoi5p-QQkTkvZzogIUiLCJ
 | `Shift` | 原地站立 | 强制站立 |
 | 鼠标额外按键 | 未使用 | 未使用 |
 
-所以默认取 **`X1`（鼠标侧键·后退）**：两款游戏都不占用鼠标额外按键；而且在「仅按下时」的启动方式下，按住侧键比按住键盘功能键省力得多。启停键可在工具内随时改（键盘键与鼠标键都支持），方案切换键 `hk` 则仍限键盘键。
+所以默认取 **`X1`（鼠标侧键·后退）**：两款游戏都不占用鼠标额外按键；而且在「仅按下时」的启动方式下，按住侧键比按住键盘功能键省力得多。启停键可在工具内随时改（键盘键与鼠标键都支持）。配置切换只在工具界面里进行（v6 起不再有游戏内切换键）。
 
 ## 字段
 
@@ -40,7 +40,7 @@ DLM5:eyJ2Ijo1LCJnIjoiZDMiLCJuIjoi5pqX6buRMyDpgJ_liLciLCJhIjoi5p-QQkTkvZzogIUiLCJ
 
 | 字段 | 必填 | 说明 |
 | --- | --- | --- |
-| `v` | 是 | 协议版本：`5`（`1`–`4` 仍可被解析） |
+| `v` | 是 | 协议版本：`6`（`1`–`5` 仍可被解析） |
 | `g` | 否 | 游戏标识：`d4` / `d3`；仅作提示，导入时与当前游戏不一致只提示不阻断 |
 | `n` | 否 | 配置名，≤ 24 字符 |
 | `a` | 否 | 作者署名，≤ 24 字符 |
@@ -52,7 +52,7 @@ DLM5:eyJ2Ijo1LCJnIjoiZDMiLCJuIjoi5pqX6buRMyDpgJ_liLciLCJhIjoi5p-QQkTkvZzogIUiLCJ
 | 字段 | 必填 | 说明 |
 | --- | --- | --- |
 | `n` | 否 | 方案名，≤ 24 字符 |
-| `hk` | 否 | 该方案的**切换键**（仅键盘键）；按下即切到此方案，留空表示不设 |
+| `hk` | 否 | **已回收（v6）**：v1–v5 的方案切换键，解析旧码时忽略（切配置请回工具界面操作） |
 | `m` | 否 | **按键模式**：`con` 并发（默认）/ `seq` 循环，见「运行时语义」 |
 | `r` | 是 | 规则数组，0–8 条；**0 条即空方案**（不触发任何技能），工具里新增但还没填技能的配置就是这个状态 |
 
@@ -94,33 +94,32 @@ DLM5:eyJ2Ijo1LCJnIjoiZDMiLCJuIjoi5pqX6buRMyDpgJ_liLciLCJhIjoi5p-QQkTkvZzogIUiLCJ
 - **延迟**：只影响发送时点在周期内的位置，不改变间隔。工具**不设「太小视为关闭」的门槛**：填 2ms 就是 2ms（能否生效由系统定时器与游戏决定，工具不替玩家预设物理上限）。界面用「最小延迟 / 最大延迟」两个框表达：只填一个，另一个在失焦/回车时自动补成相同值（即固定延迟）；两个不同则在区间内随机
 - **发送调度**：主循环不按固定周期定拍——没有待发按键时按 5ms 检测按键，有待发按键时睡到该时刻再醒，因此间隔不会被向上取整成轮询周期
 - **同键去重**：同一键同时作为触发与动作会形成自我叠加，工具启动与保存时警告
-- **方案切换**：默认启用第一个方案；其余方案可用托盘菜单或各自的 `hk` 切换键切换。`hk` 全局生效（不要求游戏在前台），按住不放的键在切换前会先释放
-- **多方案同键**：多个方案共用同一 `hk` 时只有最后设置的那个生效，保存与导入时会警告
+- **方案切换**：默认启用第一个方案，切换在工具界面里点标签完成（v6 起不再有游戏内切换键）；切换前会先释放按住不放的键
 
 ## 示例
 
 ```
-DLM5:eyJ2Ijo1LCJnIjoiZDMiLCJuIjoi5pqX6buRMyDpgJ_liLciLCJhIjoi5p-QQkTkvZzogIUiLCJ0ZyI6IlgxIiwicCI6W3sibiI6IumAn-WItyIsIm0iOiJzZXEiLCJyIjpbeyJ0ZyI6InQiLCJhIjoidGFwOjIiLCJpIjozMDAsInN0IjozfSx7InRnIjoidCIsImEiOiJob2xkOlJNQiJ9LHsidGciOiJ0IiwiYSI6InRhcDoxIiwiaSI6MTUwLCJzdCI6MiwiZCI6NDAsImRuIjoyfV19LHsibiI6IuaCrOi1jyIsImhrIjoiRjkiLCJyIjpbXX1dfQ
+DLM6:eyJ2Ijo2LCJnIjoiZDMiLCJuIjoi5pqX6buRMyDpgJ_liLciLCJhIjoi5p-QQkTkvZzogIUiLCJ0ZyI6IlgxIiwicCI6W3sibiI6IumAn-WItyIsIm0iOiJzZXEiLCJyIjpbeyJ0ZyI6InQiLCJhIjoidGFwOjIiLCJpIjozMDAsInN0IjozfSx7InRnIjoidCIsImEiOiJob2xkOlJNQiJ9LHsidGciOiJ0IiwiYSI6InRhcDoxIiwiaSI6MTUwLCJzdCI6MiwiZCI6NDAsImRuIjoyfV19LHsibiI6IuaCrOi1jyIsInIiOltdfV19
 ```
 
 解码后等价于：
 
 ```json
-{"v":5,"g":"d3","n":"暗黑3 速刷","a":"某BD作者","tg":"X1","p":[{"n":"速刷","m":"seq","r":[{"tg":"t","a":"tap:2","i":300,"st":3},{"tg":"t","a":"hold:RMB"},{"tg":"t","a":"tap:1","i":150,"st":2,"d":40,"dn":2}]},{"n":"悬赏","hk":"F9","r":[]}]}
+{"v":6,"g":"d3","n":"暗黑3 速刷","a":"某BD作者","tg":"X1","p":[{"n":"速刷","m":"seq","r":[{"tg":"t","a":"tap:2","i":300,"st":3},{"tg":"t","a":"hold:RMB"},{"tg":"t","a":"tap:1","i":150,"st":2,"d":40,"dn":2}]},{"n":"悬赏","r":[]}]}
 ```
 
-读法：暗黑3 配置，按鼠标侧键 1（`X1`）开启后——采用**循环按键**模式（一条一条按）：技能 2 为**保持Buff**（由发光环取色守卫按需补放，Buff 未断则跳过）；全程按住右键不放（引导类技能）；技能 1 **连点**，间隔 150ms，且每次在 **2～40ms 之间随机延迟**（`d=40` + `dn=2`）。第二个方案「悬赏」是**空方案**（`r: []`）：切过去按 `F9` 即可，它不按任何键——这是工具里「新增配置但还没填技能」的真实形态。
+读法：暗黑3 配置，按鼠标侧键·后退（`X1`）开启后——采用**循环按键**模式（一条一条按）：技能 2 为**保持Buff**（由发光环取色守卫按需补放，Buff 未断则跳过）；全程按住右键不放（引导类技能）；技能 1 **连点**，间隔 150ms，且每次在 **2～40ms 之间随机延迟**（`d=40` + `dn=2`）。第二个方案「悬赏」是**空方案**（`r: []`）：回工具界面点它的标签切过去即可，它不按任何键——这是工具里「新增配置但还没填技能」的真实形态。
 
 ## 校验规则（Fail Fast）
 
 工具解析时必须逐项校验；任何一条不满足即**整段拒绝**、给出明确错误，禁止部分应用、跳过非法项或静默降级：
 
-1. 前缀必须是 `DLM1`–`DLM5`（大小写不敏感），整码 ≤ 4096 字符；前缀声明版本必须与正文 `v` 一致，且 `v ∈ [1, 5]`
+1. 前缀必须是 `DLM1`–`DLM6`（大小写不敏感），整码 ≤ 4096 字符；前缀声明版本必须与正文 `v` 一致，且 `v ∈ [1, 6]`
 2. 正文必须能按 base64url 解码（容忍 `=` 填充与空白字符），解码后 ≤ 3000 字节且为合法 UTF-8
 3. JSON 必须能解析、**无未知字段**、无多余尾巴
 4. `v` 必须在支持范围内（不匹配直接拒绝并提示升级）；`g` 若出现必须在 `d4` / `d3` 之内
 5. `n` / `a` ≤ 24 字符；方案数 1–4；每方案规则数 0–8（0 条即空方案）
-6. `tg` 只接受 `t` 或 `h:<合法键名>`；`a` 的动作类型与键名必须在白名单内，序列 ≤ 6 键；`hk` 若出现必须是**合法键盘键**（仅键盘键，避免与鼠标操作冲突）
+6. `tg` 只接受 `t` 或 `h:<合法键名>`；`a` 的动作类型与键名必须在白名单内，序列 ≤ 6 键；`hk` 在 v6 起被忽略（旧码仍可导入）
 7. `tap` / `seq` 的 `i` 必须在 [20, 600000]；`once` / `hold` 不允许出现 `i`
 8. `d` 在 [-30000, 30000]；`dn` 在 [0, 30000] 且不得大于 `|d|`，也不能脱离 `d` 单独出现；`d` / `dn` 仅 `tap` 允许；`rd` 仅 v1–v4 可解析
 9. `st` 在 [0, 3]；显式声明时必须与动作相容：`1` 要求 `hold:`，`2` 要求 `tap:`，`3` 要求 `tap:`
@@ -131,6 +130,7 @@ DLM5:eyJ2Ijo1LCJnIjoiZDMiLCJuIjoi5pqX6buRMyDpgJ_liLciLCJhIjoi5p-QQkTkvZzogIUiLCJ
 
 - **v1 → v2**（2026-10-13）：规则新增 `st` / `d` / `rd`（释放策略、延迟、延迟随机）；v1 码字段语义不变
 - **v2 → v3**（2026-10-13）：方案新增 `m`（按键模式：`con` 并发 / `seq` 循环）。这是**玩家能直接感知的行为差异**，与「顺序宏」的心智对齐，因此对用户可见；v1 / v2 码仍可解析，缺省为 `con`
+- **v5 → v6**（2026-10-20）：**回收方案切换键 `hk`**。配置只有 1–4 套、每套 6 个键，游戏内按一下切配置的使用场景很少，反而多一个「和启停键抢按键」的风险；要切换回工具界面点标签即可。旧码里的 `hk` 解析时忽略，不影响导入
 - **v4 → v5**（2026-10-20）：延迟从「幅度 + 随机开关」改为**区间** `d` + `dn`，回收 `rd`（v1–v4 的 `rd=true` 折算为 `dn=10`）；执行间隔下限由 20ms 放宽到 **1ms**。这是为了让 2ms/5ms 这类常见配置能如实表达——能否生效交给系统与游戏，协议不再预设「实用下限」
 - **v3 → v4**（2026-10-20）：**允许空方案**（每方案规则数下限由 1 放宽为 0）。工具里默认只给 1 个配置、其余在标签尾部「+」新增，而新增的配置在玩家填好技能前不该按任何键——用一条 `tap:1` 占位会静默乱按。放宽是**向后兼容的**：v3 及更早的码都必然带规则，解析结果不变
 - **v3 定稿期调整**（2026-10-13）：`tg` 的默认值由 `F1` 改为 `X1`（鼠标侧键 1），并**解除启停键不支持鼠标键的限制**。依据见「为什么默认启停键是鼠标侧键」——暗黑3 的 `F1` 是「收藏」、`Shift` 在暗黑3/4 都是「强制站立」，而鼠标额外按键游戏默认都不占用。`hk`（方案切换键）仍限键盘键；`tg` 显式给出时照旧解析，旧码不受影响
@@ -139,8 +139,8 @@ DLM5:eyJ2Ijo1LCJnIjoiZDMiLCJuIjoi5pqX6buRMyDpgJ_liLciLCJhIjoi5p-QQkTkvZzogIUiLCJ
   - 界面不再提供对应列
   - 协议不再接受这三个字段（出现即拒绝）
   - 旧存档若含它们会被隔离为 `.bad-<时间戳>`，需重新配置
-- 语义或字段再次变化 → 升版本（`DLM6:`）；旧版工具遇到未知版本必须拒绝并提示升级
-- 工具声明支持的版本集合（v5 工具：`{1, 2, 3, 4, 5}`）
+- 语义或字段再次变化 → 升版本（`DLM7:`）；旧版工具遇到未知版本必须拒绝并提示升级
+- 工具声明支持的版本集合（v6 工具：`{1, 2, 3, 4, 5, 6}`）
 
 ## 实现约定
 

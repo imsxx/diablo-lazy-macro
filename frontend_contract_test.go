@@ -19,7 +19,7 @@ func TestFrontendStateJSONContract(t *testing.T) {
 	st.ToggleKeyLabel = "侧键1"
 	st.ProfileNames = []string{"配置 1"}
 	st.Profiles = []frontendProfile{{
-		Name: "配置 1", HK: "F9", HKLabel: "F9", Mode: "con",
+		Name: "配置 1", Mode: "con",
 		Slots: []frontendSlot{{
 			Name: "技能一：", Key: "1", KeyLabel: "1", Strategy: 2,
 			IntervalMS: 250, DelayMaxMS: 0, DelayMinMS: 0, Explanation: "每 250ms 持续连点「1」",
@@ -53,7 +53,7 @@ func TestFrontendStateJSONContract(t *testing.T) {
 		`"targetProcess"`,
 		`"engine"`, `"configured"`, `"status"`, `"statusText"`, `"holdMode"`, `"foreground"`,
 		`"hud"`,
-		`"name"`, `"hk"`, `"hkLabel"`, `"mode"`, `"slots"`,
+		`"mode"`, `"slots"`,
 		`"key"`, `"keyLabel"`, `"strategy"`, `"intervalMS"`, `"delayMaxMS"`, `"delayMinMS"`, `"explanation"`,
 	}
 	for _, key := range wanted {

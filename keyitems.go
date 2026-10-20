@@ -20,7 +20,6 @@ type captureMode string
 const (
 	captureSlot       captureMode = "slot"       // 技能槽位：键盘键 + 鼠标键
 	captureToggle     captureMode = "toggle"     // 宏启停键：键盘键 + 鼠标键（协议允许鼠标键）
-	captureProfileHK  captureMode = "profileHk"  // 方案切换键：仅键盘键（协议禁止鼠标键）
 	captureForceStand captureMode = "forceStand" // 强制站立键：仅键盘键（要按住修饰键，鼠标键无意义）
 	captureHelperKey  captureMode = "helperKey"  // 助手快捷键：仅键盘键，可留空表示不绑定
 )
@@ -48,8 +47,6 @@ func parseCaptureMode(s string) (captureMode, error) {
 		return captureSlot, nil
 	case captureToggle:
 		return captureToggle, nil
-	case captureProfileHK:
-		return captureProfileHK, nil
 	case captureForceStand:
 		return captureForceStand, nil
 	case captureHelperKey:
@@ -67,13 +64,6 @@ func captureOptionsFor(mode captureMode) captureOptions {
 			MouseAllowed: true,
 			DefaultToken: config.DefaultToggleKey,
 			DefaultLabel: "恢复默认（" + keyNameOfToken(config.DefaultToggleKey) + "）",
-		}
-	case captureProfileHK:
-		return captureOptions{
-			Title:      "按下方案切换键（仅键盘键）",
-			Hint:       "游戏中按一下即切换到本方案。协议不支持鼠标键。",
-			ClearToken: "",
-			ClearLabel: "清除切换键",
 		}
 	case captureForceStand:
 		return captureOptions{
@@ -144,8 +134,6 @@ func modeLabel(mode captureMode) string {
 		return "技能槽位"
 	case captureToggle:
 		return "宏启停键"
-	case captureProfileHK:
-		return "方案切换键"
 	case captureForceStand:
 		return "强制站立键"
 	case captureHelperKey:

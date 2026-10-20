@@ -50,11 +50,11 @@ func TestAddedBlankProfileResolves(t *testing.T) {
 			t.Fatalf("新增方案的槽位 %d 应是禁用状态，实际策略 %d", i+1, s.Strategy)
 		}
 	}
-	added := slotsToProfile(blank, "配置 2", "", config.ModeConcurrent)
+	added := slotsToProfile(blank, "配置 2", config.ModeConcurrent)
 	if len(added.Rules) != 0 {
 		t.Fatalf("空白方案不应含任何规则，实际 %d 条", len(added.Rules))
 	}
-	first := slotsToProfile(defaultSlots(), "配置 1", "", config.ModeConcurrent)
+	first := slotsToProfile(defaultSlots(), "配置 1", config.ModeConcurrent)
 	if _, err := config.Resolve(config.Raw{
 		Version:  config.Version,
 		Profiles: []config.RawProfile{first, added},
@@ -79,8 +79,8 @@ func TestSlotConversionStrategies(t *testing.T) {
 	// Slot 3: 禁用
 	slots[3].Strategy = 0
 
-	prof := slotsToProfile(slots, "测试方案", "F9", config.ModeConcurrent)
-	if prof.Name != "测试方案" || prof.HK != "F9" {
+	prof := slotsToProfile(slots, "测试方案", config.ModeConcurrent)
+	if prof.Name != "测试方案" {
 		t.Fatalf("方案元数据不符：%+v", prof)
 	}
 
@@ -140,7 +140,7 @@ func TestSlotStrategySurvivesRoundTrip(t *testing.T) {
 	slots[0].Strategy = strategyBuff
 	slots[0].IntervalMS = 300
 
-	prof := slotsToProfile(slots, "守卫往返", "", config.ModeConcurrent)
+	prof := slotsToProfile(slots, "守卫往返", config.ModeConcurrent)
 	raw := config.Raw{Version: config.Version, Profiles: []config.RawProfile{prof}}
 	parsed, err := config.Resolve(raw)
 	if err != nil {
@@ -163,7 +163,7 @@ func TestSlotDelaySurvivesRoundTrip(t *testing.T) {
 	slots[0].DelayMaxMS = -40
 	slots[0].DelayMinMS = 40
 
-	prof := slotsToProfile(slots, "延迟往返", "", config.ModeConcurrent)
+	prof := slotsToProfile(slots, "延迟往返", config.ModeConcurrent)
 	raw := config.Raw{Version: config.Version, Profiles: []config.RawProfile{prof}}
 	parsed, err := config.Resolve(raw)
 	if err != nil {
@@ -182,7 +182,7 @@ func TestSlotDelaySurvivesRoundTrip(t *testing.T) {
 	// 区间往返：上下界不同时写 dn。
 	slots[0].DelayMaxMS = 100
 	slots[0].DelayMinMS = 2
-	prof = slotsToProfile(slots, "区间往返", "", config.ModeConcurrent)
+	prof = slotsToProfile(slots, "区间往返", config.ModeConcurrent)
 	if _, err := config.Resolve(config.Raw{Version: config.Version, Profiles: []config.RawProfile{prof}}); err != nil {
 		t.Fatalf("延迟区间应当合法：%v", err)
 	}
@@ -200,7 +200,7 @@ func TestSlotBuffDropsDelay(t *testing.T) {
 	slots[1].DelayMaxMS = 100
 	slots[1].DelayMinMS = 100
 
-	prof := slotsToProfile(slots, "buff 干净字段", "", config.ModeConcurrent)
+	prof := slotsToProfile(slots, "buff 干净字段", config.ModeConcurrent)
 	raw := config.Raw{Version: config.Version, Profiles: []config.RawProfile{prof}}
 	parsed, err := config.Resolve(raw)
 	if err != nil {
@@ -220,7 +220,7 @@ func TestSlotNoDelayWritesNoRandom(t *testing.T) {
 	slots[0].DelayMaxMS = 0
 	slots[0].DelayMinMS = 0
 
-	prof := slotsToProfile(slots, "无延迟", "", config.ModeConcurrent)
+	prof := slotsToProfile(slots, "无延迟", config.ModeConcurrent)
 	raw := config.Raw{Version: config.Version, Profiles: []config.RawProfile{prof}}
 	parsed, err := config.Resolve(raw)
 	if err != nil {
@@ -271,7 +271,7 @@ func TestProfileModeRoundTrip(t *testing.T) {
 	slots[0].Strategy = strategySpam
 	slots[0].IntervalMS = 150
 
-	prof := slotsToProfile(slots, "循环模式", "", config.ModeSequential)
+	prof := slotsToProfile(slots, "循环模式", config.ModeSequential)
 	raw := config.Raw{Version: config.Version, Profiles: []config.RawProfile{prof}}
 	parsed, err := config.Resolve(raw)
 	if err != nil {
@@ -303,7 +303,7 @@ func TestUIClampLimitsWithinProtocol(t *testing.T) {
 		slots[0].IntervalMS = 20
 		slots[0].DelayMaxMS = delay
 		slots[0].DelayMinMS = absInt(delay)
-		prof := slotsToProfile(slots, "夹取上限", "", config.ModeConcurrent)
+		prof := slotsToProfile(slots, "夹取上限", config.ModeConcurrent)
 		if _, err := config.Resolve(config.Raw{Version: config.Version, Profiles: []config.RawProfile{prof}}); err != nil {
 			t.Fatalf("延迟 %d 应当仍被协议接受：%v", delay, err)
 		}
@@ -331,12 +331,12 @@ func TestUIClampLimitsWithinProtocol(t *testing.T) {
 	}
 
 	name := strings.Repeat("名", maxNameRunesUI)
-	prof := slotsToProfile(defaultSlots(), name, "", config.ModeConcurrent)
+	prof := slotsToProfile(defaultSlots(), name, config.ModeConcurrent)
 	if _, err := config.Resolve(config.Raw{Version: config.Version, Profiles: []config.RawProfile{prof}}); err != nil {
 		t.Fatalf("长度 %d 的配置名应当合法（说明界面上限未超过协议）：%v", maxNameRunesUI, err)
 	}
 	tooLong := strings.Repeat("名", maxNameRunesUI+1)
-	prof = slotsToProfile(defaultSlots(), tooLong, "", config.ModeConcurrent)
+	prof = slotsToProfile(defaultSlots(), tooLong, config.ModeConcurrent)
 	if _, err := config.Resolve(config.Raw{Version: config.Version, Profiles: []config.RawProfile{prof}}); err == nil {
 		t.Fatal("超出界面上限的配置名应被协议拒绝（说明界面上限落后于协议）")
 	}

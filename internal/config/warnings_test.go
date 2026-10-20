@@ -31,28 +31,19 @@ func TestWarningsCleanConfig(t *testing.T) {
 	}
 }
 
-func TestWarningsDetectsSwitchKeyConflicts(t *testing.T) {
+// 方案切换键在 v6 已回收：同一键被多个方案"占用"不再是问题，
+// 但「触发键与动作键重合」仍要提示。
+func TestWarningsDetectsTriggerCollision(t *testing.T) {
 	p := &Parsed{
 		ToggleVK: 0x70, // F1
 		Profiles: []ParsedProfile{
-			{Name: "速刷", SwitchVK: 0x71, Rules: []ParsedRule{{Kind: ActionTap, Keys: []uint16{0x31}, IntervalMS: 100}}},
-			{Name: "攻坚", SwitchVK: 0x71, Rules: []ParsedRule{{Kind: ActionOnce, Keys: []uint16{0x32}}}},
-			{Name: "冲层", SwitchVK: 0x70, Rules: []ParsedRule{{Kind: ActionOnce, Keys: []uint16{0x33}}}},
+			{Name: "速刷", Rules: []ParsedRule{
+				{Kind: ActionTap, Keys: []uint16{0x70}, IntervalMS: 100}, // 动作键 = 启停键
+			}},
 		},
 	}
 	warnings := Warnings(p)
-	if len(warnings) != 2 {
-		t.Fatalf("期望 2 条警告（切换键重复、切换键与启停键重合），实际 %d 条：%v", len(warnings), warnings)
-	}
-}
-
-func TestWarningsDetectsSwitchKeyAsActionKey(t *testing.T) {
-	p := &Parsed{
-		Profiles: []ParsedProfile{{Name: "速刷", SwitchVK: 0x77, Rules: []ParsedRule{
-			{Kind: ActionTap, Keys: []uint16{0x77}, IntervalMS: 100},
-		}}},
-	}
-	if warnings := Warnings(p); len(warnings) != 1 {
-		t.Fatalf("期望 1 条警告（切换键同时是动作键），实际 %d 条：%v", len(warnings), warnings)
+	if len(warnings) != 1 {
+		t.Fatalf("期望 1 条警告（触发键与启停键重合），实际 %d 条：%v", len(warnings), warnings)
 	}
 }

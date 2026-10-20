@@ -307,11 +307,6 @@ function renderExtraSettings() {
 
   // 键帽是纯展示按钮（不是输入控件）：必须直接写文本，不能像输入框那样跳过「有焦点」的元素，
   // 否则玩家点过它之后，改完键位这里会一直显示旧值。
-  const hkBtn = $id('profileHkBtn');
-  if (hkBtn) {
-    hkBtn.textContent = prof.hkLabel || '无';
-    hkBtn.title = '游戏中按此键秒切本方案（仅键盘键；支持清除）';
-  }
 
   const nameInput = $id('profileNameInput');
   if (nameInput && document.activeElement !== nameInput) {
@@ -562,7 +557,7 @@ async function saveProfileName() {
   const input = $id('profileNameInput');
   if (!prof || !input) return;
   const name = input.value.trim() || '配置 ' + (currentTab + 1);
-  const r = await callApi('api_updateProfileMeta', currentTab, name, prof.hk, prof.mode);
+  const r = await callApi('api_updateProfileMeta', currentTab, name, prof.mode);
   if (!r.ok) {
     await reloadState();
     return;
@@ -603,7 +598,7 @@ async function deleteProfile() {
   const name = prof.name || '配置 ' + (currentTab + 1);
   const ok = await askConfirm(
     '删除配置「' + name + '」？',
-    '该配置的技能槽位、切换键与按键模式会一起删除，无法撤销。',
+    '该配置的技能槽位与按键模式会一起删除，无法撤销。',
     '确认删除'
   );
   if (!ok) return;
@@ -621,7 +616,7 @@ async function saveProfileMode() {
   const prof = currentProfile();
   const sel = $id('profileModeSelect');
   if (!prof || !sel) return;
-  const r = await callApi('api_updateProfileMeta', currentTab, prof.name, prof.hk, sel.value);
+  const r = await callApi('api_updateProfileMeta', currentTab, prof.name, sel.value);
   if (!r.ok) {
     await reloadState();
     return;
@@ -727,9 +722,6 @@ function captureToggleKey() {
   return openCapture('toggle');
 }
 
-function captureProfileHk() {
-  return openCapture('profileHk');
-}
 
 function captureForceStandKey() {
   return openCapture('forceStand');
@@ -861,9 +853,6 @@ async function applyCapturedKey(target, token, label) {
     }
     case 'toggle':
       result = await callApi('api_updateToggle', token);
-      break;
-    case 'profileHk':
-      result = await callApi('api_updateProfileMeta', currentTab, prof.name, token, prof.mode);
       break;
     case 'forceStand':
       result = await callApi('api_updatePreference',

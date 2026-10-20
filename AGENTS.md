@@ -36,7 +36,7 @@
 ## 四、分享码协议铁律
 
 - 契约文档 `docs/share-code.md` 与实现 `internal/config` **必须同步修改**，任何一边单独变更都算缺陷。
-- 字段或语义变化**必须升版本**（当前 v5，前缀 `DLM5:`），并保持可解析旧版本；旧存档在加载时走迁移（`config.UpgradeLegacy`）。
+- 字段或语义变化**必须升版本**（当前 v6，前缀 `DLM6:`），并保持可解析旧版本；旧存档在加载时走迁移（`config.UpgradeLegacy`）。
 - 解析必须 **Fail Fast**：整段拒绝、错误信息明确；禁止部分应用、跳过非法项或静默降级。
 - 文档中的示例码必须**真实可解析**，由测试守护（`internal/config/config_test.go`）。
 

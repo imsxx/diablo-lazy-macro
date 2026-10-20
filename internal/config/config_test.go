@@ -20,9 +20,13 @@ const docExampleV3 = `DLM3:eyJ2IjozLCJnIjoiZDMiLCJuIjoi5pqX6buRMyDpgJ_liLciLCJhI
 // docExampleV4 是 v4 历史示例码：不再是最新协议，但必须始终可解析（空方案 + rd 折算）。
 const docExampleV4 = `DLM4:eyJ2Ijo0LCJnIjoiZDMiLCJuIjoi5pqX6buRMyDpgJ_liLciLCJhIjoi5p-QQkTkvZzogIUiLCJ0ZyI6IlgxIiwicCI6W3sibiI6IumAn-WItyIsIm0iOiJzZXEiLCJyIjpbeyJ0ZyI6InQiLCJhIjoidGFwOjIiLCJpIjozMDAsInN0IjozfSx7InRnIjoidCIsImEiOiJob2xkOlJNQiJ9LHsidGciOiJ0IiwiYSI6InRhcDoxIiwiaSI6MTUwLCJzdCI6MiwiZCI6LTQwLCJyZCI6dHJ1ZX1dfSx7Im4iOiLmgqzotY8iLCJoayI6IkY5IiwiciI6W119XX0`
 
-// docExampleV5 是 docs/share-code.md 中的示例码（v5）：必须始终可解析。
-// 第三个规则展示延迟区间（d=40 / dn=2），第二个方案是空方案。
+// docExampleV5 是 v5 历史示例码：不再是最新协议，但必须始终可解析。
+// 它带一个已回收的 hk（方案切换键），解析时应被忽略而不是报错。
 const docExampleV5 = `DLM5:eyJ2Ijo1LCJnIjoiZDMiLCJuIjoi5pqX6buRMyDpgJ_liLciLCJhIjoi5p-QQkTkvZzogIUiLCJ0ZyI6IlgxIiwicCI6W3sibiI6IumAn-WItyIsIm0iOiJzZXEiLCJyIjpbeyJ0ZyI6InQiLCJhIjoidGFwOjIiLCJpIjozMDAsInN0IjozfSx7InRnIjoidCIsImEiOiJob2xkOlJNQiJ9LHsidGciOiJ0IiwiYSI6InRhcDoxIiwiaSI6MTUwLCJzdCI6MiwiZCI6NDAsImRuIjoyfV19LHsibiI6IuaCrOi1jyIsImhrIjoiRjkiLCJyIjpbXX1dfQ`
+
+// docExampleV6 是 docs/share-code.md 中的示例码（v6）：必须始终可解析。
+// 第三个规则展示延迟区间（d=40 / dn=2），第二个方案是空方案；v6 起不再有 hk。
+const docExampleV6 = `DLM6:eyJ2Ijo2LCJnIjoiZDMiLCJuIjoi5pqX6buRMyDpgJ_liLciLCJhIjoi5p-QQkTkvZzogIUiLCJ0ZyI6IlgxIiwicCI6W3sibiI6IumAn-WItyIsIm0iOiJzZXEiLCJyIjpbeyJ0ZyI6InQiLCJhIjoidGFwOjIiLCJpIjozMDAsInN0IjozfSx7InRnIjoidCIsImEiOiJob2xkOlJNQiJ9LHsidGciOiJ0IiwiYSI6InRhcDoxIiwiaSI6MTUwLCJzdCI6MiwiZCI6NDAsImRuIjoyfV19LHsibiI6IuaCrOi1jyIsInIiOltdfV19`
 
 // legacyPrefix 是 v1 前缀（仅测试使用）。
 const legacyPrefix = "DLM1:"
@@ -146,12 +150,12 @@ func TestUpgradeLegacyIsIdempotent(t *testing.T) {
 func TestToggleKeyDefaultsToMouseSideButton(t *testing.T) {
 	// 缺省启停键为鼠标侧键 1：暗黑3/4 的默认键位都不占用鼠标额外按键
 	// （暗黑3 的 F1 是「收藏」，Shift 两款都是「强制站立」）。
-	p := mustParse(t, codeFromJSON(`{"v":5,"p":[{"r":[{"tg":"t","a":"tap:1","i":100}]}]}`))
+	p := mustParse(t, codeFromJSON(`{"v":6,"p":[{"r":[{"tg":"t","a":"tap:1","i":100}]}]}`))
 	if p.ToggleVK != 0x05 {
 		t.Fatalf("缺省启停键应为 X1(0x05)，实际 0x%02X", p.ToggleVK)
 	}
 	// 显式使用鼠标键作为启停键应当被接受。
-	p2 := mustParse(t, codeFromJSON(`{"v":5,"tg":"X2","p":[{"r":[{"tg":"t","a":"tap:1","i":100}]}]}`))
+	p2 := mustParse(t, codeFromJSON(`{"v":6,"tg":"X2","p":[{"r":[{"tg":"t","a":"tap:1","i":100}]}]}`))
 	if p2.ToggleVK != 0x06 {
 		t.Fatalf("鼠标键作为启停键应被接受，实际 0x%02X", p2.ToggleVK)
 	}
@@ -159,7 +163,7 @@ func TestToggleKeyDefaultsToMouseSideButton(t *testing.T) {
 
 func TestParseRejectsInvalidMode(t *testing.T) {
 	valid := `{"tg":"t","a":"tap:1","i":100}`
-	code := codeFromJSON(`{"v":5,"p":[{"m":"round","r":[` + valid + `]}]}`)
+	code := codeFromJSON(`{"v":6,"p":[{"m":"round","r":[` + valid + `]}]}`)
 	if _, err := Parse(code); err == nil {
 		t.Fatal("非法触发模式应当报错")
 	}
@@ -208,17 +212,17 @@ func TestDocExampleMatchesMarkdown(t *testing.T) {
 	if found == "" {
 		t.Fatalf("docs/share-code.md 里没有以 %s 开头的示例码", Prefix)
 	}
-	if found != docExampleV5 {
-		t.Fatalf("文档示例码与测试常量不一致（文档 %d 字符 / 常量 %d 字符）", len(found), len(docExampleV5))
+	if found != docExampleV6 {
+		t.Fatalf("文档示例码与测试常量不一致（文档 %d 字符 / 常量 %d 字符）", len(found), len(docExampleV6))
 	}
 	if _, err := Parse(found); err != nil {
 		t.Fatalf("文档示例码不可解析：%v", err)
 	}
 }
 
-// TestParseDocExampleV5 守护 v5 示例码：延迟区间与空方案。
-func TestParseDocExampleV5(t *testing.T) {
-	p := mustParse(t, docExampleV5)
+// TestParseDocExampleV6 守护 v6 示例码：延迟区间与空方案。
+func TestParseDocExampleV6(t *testing.T) {
+	p := mustParse(t, docExampleV6)
 	if p.Game != "d3" || len(p.Profiles) != 2 {
 		t.Fatalf("v5 示例基础字段解析错误：%+v", p)
 	}
@@ -250,14 +254,11 @@ func TestParseDocExampleV4(t *testing.T) {
 	if len(empty.Rules) != 0 {
 		t.Fatalf("第二个方案应是空方案，实际 %d 条规则", len(empty.Rules))
 	}
-	if empty.SwitchVK != 0x78 {
-		t.Fatalf("空方案的切换键应为 F9(0x78)，实际 0x%02X", empty.SwitchVK)
-	}
 }
 
 // 空方案（0 条规则）在 v4 起合法：玩家新增的配置在填好技能前不该按任何键。
 func TestParseAllowsEmptyProfile(t *testing.T) {
-	p := mustParse(t, codeFromJSON(`{"v":5,"p":[{"r":[]},{"n":"有规则","r":[{"tg":"t","a":"tap:1","i":100}]}]}`))
+	p := mustParse(t, codeFromJSON(`{"v":6,"p":[{"r":[]},{"n":"有规则","r":[{"tg":"t","a":"tap:1","i":100}]}]}`))
 	if len(p.Profiles) != 2 || len(p.Profiles[0].Rules) != 0 || len(p.Profiles[1].Rules) != 1 {
 		t.Fatalf("空方案解析错误：%+v", p.Profiles)
 	}
@@ -312,23 +313,21 @@ func TestParseRejectsInvalid(t *testing.T) {
 		"版本超出支持":    "DLM9:" + base64.RawURLEncoding.EncodeToString([]byte(`{"v":9,"p":[{"r":[`+valid+`]}]}`)),
 		"前缀与正文版本不一致": legacyCodeFromJSON(`{"v":3,"p":[{"r":[` + valid + `]}]}`),
 		"非 Base64": Prefix + "不是base64!!",
-		"游戏标识非法":   codeFromJSON(`{"v":5,"g":"d5","p":[{"r":[` + valid + `]}]}`),
-		"未知字段":     codeFromJSON(`{"v":5,"x":1,"p":[{"r":[` + valid + `]}]}`),
-		"没有方案":     codeFromJSON(`{"v":5,"p":[]}`),
-		"规则过多":     codeFromJSON(`{"v":5,"p":[{"r":[` + nine + `]}]}`),
-		"间隔过小":     codeFromJSON(`{"v":5,"p":[{"r":[{"tg":"t","a":"tap:1","i":0}]}]}`),
-		"间隔缺失":     codeFromJSON(`{"v":5,"p":[{"r":[{"tg":"t","a":"tap:1"}]}]}`),
-		"单点带间隔":    codeFromJSON(`{"v":5,"p":[{"r":[{"tg":"t","a":"once:1","i":100}]}]}`),
-		"按键名非法":    codeFromJSON(`{"v":5,"p":[{"r":[{"tg":"t","a":"tap:ZZ","i":100}]}]}`),
-		"序列过长":     codeFromJSON(`{"v":5,"p":[{"r":[{"tg":"t","a":"seq:1,2,3,4,5,6,7","i":100}]}]}`),
-		"触发方式非法":   codeFromJSON(`{"v":5,"p":[{"r":[{"tg":"x","a":"tap:1","i":100}]}]}`),
-		"触发键非法":    codeFromJSON(`{"v":5,"p":[{"r":[{"tg":"h:??","a":"tap:1","i":100}]}]}`),
+		"游戏标识非法":   codeFromJSON(`{"v":6,"g":"d5","p":[{"r":[` + valid + `]}]}`),
+		"未知字段":     codeFromJSON(`{"v":6,"x":1,"p":[{"r":[` + valid + `]}]}`),
+		"没有方案":     codeFromJSON(`{"v":6,"p":[]}`),
+		"规则过多":     codeFromJSON(`{"v":6,"p":[{"r":[` + nine + `]}]}`),
+		"间隔过小":     codeFromJSON(`{"v":6,"p":[{"r":[{"tg":"t","a":"tap:1","i":0}]}]}`),
+		"间隔缺失":     codeFromJSON(`{"v":6,"p":[{"r":[{"tg":"t","a":"tap:1"}]}]}`),
+		"单点带间隔":    codeFromJSON(`{"v":6,"p":[{"r":[{"tg":"t","a":"once:1","i":100}]}]}`),
+		"按键名非法":    codeFromJSON(`{"v":6,"p":[{"r":[{"tg":"t","a":"tap:ZZ","i":100}]}]}`),
+		"序列过长":     codeFromJSON(`{"v":6,"p":[{"r":[{"tg":"t","a":"seq:1,2,3,4,5,6,7","i":100}]}]}`),
+		"触发方式非法":   codeFromJSON(`{"v":6,"p":[{"r":[{"tg":"x","a":"tap:1","i":100}]}]}`),
+		"触发键非法":    codeFromJSON(`{"v":6,"p":[{"r":[{"tg":"h:??","a":"tap:1","i":100}]}]}`),
 
-		"切换键用鼠标":   codeFromJSON(`{"v":5,"p":[{"r":[` + valid + `],"hk":"X1"}]}`),
-		"切换键非法":    codeFromJSON(`{"v":5,"p":[{"r":[` + valid + `],"hk":"??"}]}`),
-		"名称过长":     codeFromJSON(`{"v":5,"n":"` + strings.Repeat("长", 25) + `","p":[{"r":[` + valid + `]}]}`),
-		"JSON 有尾巴":  codeFromJSON(`{"v":5,"p":[{"r":[` + valid + `]}]}{}`),
-		"JSON 未闭合":  codeFromJSON(`{"v":5,"p":[{"r":[` + valid),
+		"名称过长":     codeFromJSON(`{"v":6,"n":"` + strings.Repeat("长", 25) + `","p":[{"r":[` + valid + `]}]}`),
+		"JSON 有尾巴":  codeFromJSON(`{"v":6,"p":[{"r":[` + valid + `]}]}{}`),
+		"JSON 未闭合":  codeFromJSON(`{"v":6,"p":[{"r":[` + valid),
 	}
 	for name, code := range cases {
 		if _, err := Parse(code); err == nil {
@@ -338,7 +337,7 @@ func TestParseRejectsInvalid(t *testing.T) {
 }
 
 func TestParseV2TuningFields(t *testing.T) {
-	js := `{"v":5,"p":[{"r":[` +
+	js := `{"v":6,"p":[{"r":[` +
 		`{"tg":"t","a":"tap:2","i":300,"st":3},` +
 		`{"tg":"t","a":"tap:1","i":1000,"st":2,"d":-40,"dn":40},` +
 		`{"tg":"t","a":"hold:RMB","st":1}]}]}`
@@ -377,7 +376,7 @@ func TestParseRejectsInvalidTuning(t *testing.T) {
 		"已回收字段 pr":  `{"tg":"t","a":"tap:1","i":100,"st":3,"pr":1}`,
 	}
 	for name, rule := range cases {
-		code := codeFromJSON(`{"v":5,"p":[{"r":[` + rule + `]}]}`)
+		code := codeFromJSON(`{"v":6,"p":[{"r":[` + rule + `]}]}`)
 		if _, err := Parse(code); err == nil {
 			t.Errorf("%s：应当报错但没有", name)
 		}
@@ -391,7 +390,7 @@ func TestEncodeRoundTrip(t *testing.T) {
 		Author:  "作者",
 		Toggle:  "F8",
 		Profiles: []RawProfile{
-			{Name: "速刷", HK: "F2", Mode: ModeSequential, Rules: []RawRule{
+			{Name: "速刷", Mode: ModeSequential, Rules: []RawRule{
 				{Trigger: "t", Action: "tap:4", IntervalMS: 250},
 				{Trigger: "h:X1", Action: "seq:2,3", IntervalMS: 200},
 				{Trigger: "t", Action: "hold:RMB"},
@@ -410,9 +409,6 @@ func TestEncodeRoundTrip(t *testing.T) {
 	p := mustParse(t, code)
 	if p.ToggleVK != 0x77 || p.Name != "测试配置" {
 		t.Fatalf("回读解析错误：%+v", p)
-	}
-	if p.Profiles[0].SwitchVK != 0x71 {
-		t.Fatalf("方案切换键回读错误：0x%02X", p.Profiles[0].SwitchVK)
 	}
 	if p.Profiles[0].Mode != ModeSequential {
 		t.Fatalf("触发模式回读错误：%q", p.Profiles[0].Mode)

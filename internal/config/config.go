@@ -1,6 +1,6 @@
-// Package config 实现分享码协议 v5 的解析、编码与校验（契约文档：docs/share-code.md）。
+// Package config 实现分享码协议 v6 的解析、编码与校验（契约文档：docs/share-code.md）。
 // 解析必须 Fail Fast：任何不合法输入整段拒绝，禁止部分应用或静默降级。
-// 向后兼容：仍可解析 v1–v4 分享码（旧码导入后按当前版本重新导出）。
+// 向后兼容：仍可解析 v1–v5 分享码（旧码导入后按当前版本重新导出）。
 package config
 
 import (
@@ -18,9 +18,9 @@ import (
 
 const (
 	// Prefix 是当前版本分享码前缀，字母大小写不敏感；其后为 base64url 编码的紧凑 JSON。
-	Prefix = "DLM5:"
+	Prefix = "DLM6:"
 	// Version 是当前协议版本。
-	Version = 5
+	Version = 6
 	// MinVersion 是仍可解析的最旧协议版本（旧分享码与旧存档可继续使用）。
 	MinVersion = 1
 
@@ -82,9 +82,11 @@ type Raw struct {
 
 // RawProfile 是一套可切换的规则集合的 JSON 形态。
 type RawProfile struct {
-	Name  string    `json:"n,omitempty"`
-	HK    string    `json:"hk,omitempty"` // 方案切换键（仅键盘键，可留空）
-	Mode  string    `json:"m,omitempty"`  // 触发模式：seq 循环 / con 并发（缺省即并发）
+	Name string `json:"n,omitempty"`
+	// HK 是 v1–v5 的方案切换键，v6 起回收：切换配置请回工具界面进行。
+	// 字段保留只为让旧码仍可解析（解析时忽略）。
+	HK    string    `json:"hk,omitempty"`
+	Mode  string    `json:"m,omitempty"` // 触发模式：seq 循环 / con 并发（缺省即并发）
 	Rules []RawRule `json:"r"`
 }
 
@@ -113,12 +115,11 @@ type Parsed struct {
 	Profiles []ParsedProfile
 }
 
-// ParsedProfile 是解析后的方案；SwitchVK == 0 表示未设置方案切换键。
+// ParsedProfile 是解析后的方案。
 type ParsedProfile struct {
-	Name     string
-	SwitchVK uint16
-	Mode     string // 触发模式：ModeSequential / ModeConcurrent
-	Rules    []ParsedRule
+	Name  string
+	Mode  string // 触发模式：ModeSequential / ModeConcurrent
+	Rules []ParsedRule
 }
 
 // ParsedRule 是解析后的规则；HoldVK == 0 表示宏开启期间持续触发，否则为按住触发键。
@@ -283,17 +284,9 @@ func resolve(raw *Raw) (*Parsed, error) {
 		if err != nil {
 			return nil, err
 		}
+		// v1–v5 的 hk（方案切换键）已回收：旧码里的 hk 解析时直接忽略，
+		// 免得玩家以为「按一下就切方案」还在生效。
 		pp := ParsedProfile{Name: rp.Name, Mode: mode}
-		if hk := strings.TrimSpace(rp.HK); hk != "" {
-			vk, err := keys.Parse(hk)
-			if err != nil {
-				return nil, fmt.Errorf("方案 #%d 的切换键无效：%v", pi+1, err)
-			}
-			if keys.IsMouse(vk) {
-				return nil, fmt.Errorf("方案 #%d 的切换键不支持鼠标键（%s），请改用键盘键", pi+1, keys.Label(vk))
-			}
-			pp.SwitchVK = vk
-		}
 		for ri, rr := range rp.Rules {
 			rule, err := resolveRule(pi+1, ri+1, raw.Version, rr)
 			if err != nil {
