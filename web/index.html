@@ -224,12 +224,6 @@
               <option value="5">太古传奇</option>
             </select>
           </div>
-          <div class="form-item">
-            <label class="checkbox-label sm" title="输出每一步取色与判定，便于复现问题">
-              <input type="checkbox" id="helperDevCheck" onchange="saveHelperSettings()">
-              <span>开发者日志</span>
-            </label>
-          </div>
         </div>
 
         <div class="helper-checklist" id="helperChecklist">
@@ -281,6 +275,12 @@
     <div class="capture-box log-box">
       <div class="capture-title">运行日志</div>
       <div class="log-path" id="logPath">—</div>
+      <div class="log-options">
+        <label class="checkbox-label sm" title="助手运行时输出每一步取色、判定与鼠标去向；复现助手问题时再打开">
+          <input type="checkbox" id="logDevCheck" onchange="saveLogDevMode()">
+          <span>助手详细日志（排查用）</span>
+        </label>
+      </div>
       <pre class="log-text" id="logText"></pre>
       <div class="capture-actions">
         <button class="tool-btn" onclick="copyLog()">复制全部</button>

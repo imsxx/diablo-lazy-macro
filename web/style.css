@@ -941,6 +941,13 @@ body {
   word-break: break-all;
 }
 
+.log-options {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+}
+
 .log-text {
   margin-top: 8px;
   max-height: 360px;

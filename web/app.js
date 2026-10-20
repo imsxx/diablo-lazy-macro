@@ -360,7 +360,7 @@ function renderHelperSection() {
 
   setValueIfIdle($id('helperSpeedSelect'), String(h.delayMS || 150));
   setValueIfIdle($id('reforgeTargetSelect'), String(h.reforgeTarget || 0));
-  setCheckedIfIdle($id('helperDevCheck'), !!h.devMode);
+
 
   const checklist = $id('helperChecklist');
   if (!checklist) return;
@@ -682,7 +682,8 @@ async function saveHelperSettings() {
   const hotkey = (state && state.helpers && state.helpers.hotkey) || '';
   const speed = parseInt($id('helperSpeedSelect').value, 10) || 0;
   const target = parseInt($id('reforgeTargetSelect').value, 10) || 0;
-  const dev = $id('helperDevCheck').checked;
+  // 详细日志是「日志」的开关，不属于辅助功能：它的界面在运行日志浮层里。
+  const dev = !!(state && state.helpers && state.helpers.devMode);
   const enabled = [];
   document.querySelectorAll('#helperChecklist input[type="checkbox"]:checked').forEach((cb) => {
     enabled.push(cb.value);
@@ -927,7 +928,7 @@ async function applyCapturedKey(target, token, label) {
       result = await callApi('api_updateHelpers', token,
         parseInt($id('helperSpeedSelect').value, 10) || 0,
         parseInt($id('reforgeTargetSelect').value, 10) || 0,
-        $id('helperDevCheck').checked, enabled);
+        !!(state && state.helpers && state.helpers.devMode), enabled);
       break;
     }
     default:
@@ -979,8 +980,31 @@ async function openLog() {
   const r = await callApi('api_getLog');
   if (!r.ok) return;
   renderLog(r.value);
+  syncLogDevMode();
   const overlay = $id('logOverlay');
   if (overlay) overlay.style.display = 'flex';
+}
+
+// syncLogDevMode 让日志浮层里的「助手详细日志」勾选态跟随后端设置。
+function syncLogDevMode() {
+  const box = $id('logDevCheck');
+  if (!box) return;
+  setCheckedIfIdle(box, !!(state && state.helpers && state.helpers.devMode));
+}
+
+// saveLogDevMode 只切日志详细度：不涉及助手功能开关，改完立即生效。
+async function saveLogDevMode() {
+  const box = $id('logDevCheck');
+  if (!box) return;
+  const r = await callApi('api_setHelperDevMode', box.checked);
+  if (!r.ok) {
+    await reloadState();
+    syncLogDevMode();
+    return;
+  }
+  await reloadState();
+  syncLogDevMode();
+  showNotice(box.checked ? '已开启助手详细日志（日志会明显变多）' : '已关闭助手详细日志', 'ok');
 }
 
 function renderLog(data) {

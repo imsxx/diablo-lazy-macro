@@ -733,6 +733,22 @@ func (w *mainWindow) initBindings() {
 		return nil
 	})
 
+	// api_setHelperDevMode 只切换「助手详细日志」，与助手功能开关无关：
+	// 它是日志详细度，所以入口在运行日志浮层里，而不是辅助功能卡片。
+	bind("api_setHelperDevMode", func(on bool) error {
+		hs := w.app.settings.Helpers
+		prev := hs.DevMode
+		hs.DevMode = on
+		w.app.settings.Helpers = hs
+		if err := store.SaveSettings(w.app.dir, *w.app.settings); err != nil {
+			w.app.settings.Helpers.DevMode = prev
+			return err
+		}
+		w.app.log.Printf("[日志] 助手详细日志：%v", on)
+		w.refreshStatus()
+		return nil
+	})
+
 	bind("api_updateHelpers", func(hotkey string, speedMS, reforgeTarget int, devMode bool, enabled []string) error {
 		hs := w.app.settings.Helpers
 		hotkey = strings.ToUpper(strings.TrimSpace(hotkey))
