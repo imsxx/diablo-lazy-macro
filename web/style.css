@@ -991,8 +991,8 @@ body {
   line-height: 1.5;
 }
 
-/* 悬浮窗关闭时子选项置灰提示 */
-.pref-hud-options.disabled {
+/* 悬浮窗关闭时只淡化显示方式（不禁用，允许先配好再打开） */
+.hud-group.disabled {
   opacity: 0.45;
 }
 

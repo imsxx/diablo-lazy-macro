@@ -397,18 +397,17 @@ function renderPreferences() {
 
   const hud = state.hud;
   if (!hud) return;
+  setCheckedIfIdle($id('hudEnabledCheck'), !!hud.enabled);
   setValueIfIdle($id('hudModeSelect'), hud.mode || 'bar');
   setValueIfIdle($id('hudAttachSelect'), hud.attach || 'free');
   setCheckedIfIdle($id('hudLockedCheck'), !!hud.locked);
   setCheckedIfIdle($id('hudGameOnlyCheck'), !!hud.gameOnly);
 
-  // 悬浮窗关闭时把子选项置灰：避免出现「改了半天没反应」的错觉。
+  // 关闭时只淡化显示方式，不禁用：玩家可以先配好形态/位置再打开，
+  // 这里锁死会让「想开却找不到开关」变成第二个坑。
   const optionsRow = $id('hudOptionsRow');
   if (optionsRow) {
     optionsRow.classList.toggle('disabled', !hud.enabled);
-    optionsRow.querySelectorAll('select, input, button').forEach((el) => {
-      el.disabled = !hud.enabled;
-    });
   }
 }
 
@@ -418,6 +417,8 @@ function renderHUDToggle() {
   if (!btn) return;
   const on = !!(state && state.hud && state.hud.enabled);
   btn.classList.toggle('active', on);
+  // 按钮上直接写状态：只有「悬浮窗」三个字时，玩家不知道它现在是开还是关。
+  btn.textContent = on ? '悬浮窗 开' : '悬浮窗 关';
   btn.title = on ? '悬浮窗已开启：点击关闭' : '悬浮窗已关闭：点击开启';
 }
 
@@ -719,11 +720,10 @@ async function savePreferences() {
 }
 
 async function saveHUDSettings() {
-  // 开关在顶栏，这里只改显示方式：开/关状态取后端下发的值，不从 DOM 猜。
-  const hud = (state && state.hud) || {};
+  const box = $id('hudEnabledCheck');
   const r = await callApi(
     'api_updateHUD',
-    !!hud.enabled,
+    !!(box && box.checked),
     $id('hudModeSelect').value,
     $id('hudLockedCheck').checked,
     $id('hudGameOnlyCheck').checked,
