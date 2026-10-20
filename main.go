@@ -111,12 +111,6 @@ type app struct {
 	helperRunning    atomic.Bool
 	helperAbort      atomic.Bool
 
-	toggleAction   *walk.Action
-	profileActions []*walk.Action
-	gameActions    []*walk.Action
-	subMenuProfile *walk.Menu
-	subMenuGame    *walk.Menu
-
 	logDlg *walk.Dialog
 	logTe  *walk.TextEdit
 
@@ -196,7 +190,7 @@ func newApp() (*app, error) {
 		}
 	}
 
-	if err := a.rebuildMenu(); err != nil {
+	if err := a.initTrayMenu(); err != nil {
 		return nil, err
 	}
 	a.refreshUI()
@@ -396,132 +390,34 @@ func (a *app) switchGame(gameID string) {
 		walk.MsgBox(a.owner(), appName, "已切换游戏，但设置保存失败（下次启动会回到旧游戏）：\n"+err.Error(),
 			walk.MsgBoxOK|walk.MsgBoxIconWarning)
 	}
-	if err := a.rebuildMenu(); err != nil {
-		a.log.Printf("[错误] 重建菜单失败：%v", err)
-	}
 	a.afterStateChange()
 	a.log.Printf("切换到 %s（目标进程 %s）", gameDisplayName(gameID), a.targetProcessOf(gameID))
 }
 
-func (a *app) rebuildMenu() error {
+// initTrayMenu 只建两个入口：打开界面、退出。
+// 所有操作都在界面里做——托盘菜单不该再养一份「切换游戏 / 切换方案 / 导入导出」的影子界面。
+func (a *app) initTrayMenu() error {
 	if a.ni == nil {
 		return nil
 	}
 	menu := a.ni.ContextMenu()
-	var buildErr error
-	check := func(err error) {
-		if err != nil && buildErr == nil {
-			buildErr = err
-		}
-	}
-
-	check(menu.Actions().Clear())
-	if a.subMenuProfile != nil {
-		a.subMenuProfile.Dispose()
-		a.subMenuProfile = nil
-	}
-	if a.subMenuGame != nil {
-		a.subMenuGame.Dispose()
-		a.subMenuGame = nil
-	}
-
-	ver := walk.NewAction()
-	check(ver.SetText(fmt.Sprintf("%s v%s", appName, version)))
-	check(ver.SetEnabled(false))
-	check(menu.Actions().Add(ver))
-
-	showAct := walk.NewAction()
-	check(showAct.SetText("显示主窗口"))
-	showAct.Triggered().Attach(a.showMainWindow)
-	check(menu.Actions().Add(showAct))
-
-	a.toggleAction = walk.NewAction()
-	check(a.toggleAction.SetCheckable(true))
-	a.toggleAction.Triggered().Attach(a.toggleFromUI)
-	check(menu.Actions().Add(a.toggleAction))
-
-	// 切换游戏
-	gameSub, err := walk.NewMenu()
-	if err != nil {
+	if err := menu.Actions().Clear(); err != nil {
 		return err
 	}
-	a.subMenuGame = gameSub
-	gameSubAct, err := menu.Actions().AddMenu(gameSub)
-	if err != nil {
-		return err
-	}
-	check(gameSubAct.SetText("切换游戏"))
-	a.gameActions = nil
-	for _, g := range games.All() {
-		id := g.ID
-		act := walk.NewAction()
-		check(act.SetText(g.Name))
-		check(act.SetCheckable(true))
-		act.Triggered().Attach(func() { a.switchGame(id) })
-		check(gameSub.Actions().Add(act))
-		a.gameActions = append(a.gameActions, act)
-	}
-
-	// 切换方案（仅当前游戏有多个方案时）
-	snap := a.st.snapshot()
-	a.profileActions = nil
-	if snap.Engine != nil && snap.Engine.ProfileCount() > 1 {
-		sub, err := walk.NewMenu()
-		if err != nil {
-			return err
-		}
-		a.subMenuProfile = sub
-		subAct, err := menu.Actions().AddMenu(sub)
-		if err != nil {
-			return err
-		}
-		check(subAct.SetText("切换方案"))
-		for i := 0; i < snap.Engine.ProfileCount(); i++ {
-			idx := i
-			act := walk.NewAction()
-			check(act.SetText(profileDisplayName(snap.Engine, idx)))
-			check(act.SetCheckable(true))
-			act.Triggered().Attach(func() { a.switchProfile(idx) })
-			check(sub.Actions().Add(act))
-			a.profileActions = append(a.profileActions, act)
-		}
-	}
-
-	check(menu.Actions().Add(walk.NewSeparatorAction()))
-
-	importAct := walk.NewAction()
-	check(importAct.SetText("从剪贴板导入分享码…"))
-	// walk 的 Triggered 只接受无参函数，这里包装一次（导入返回是否真正应用，供托盘提示用）。
-	importAct.Triggered().Attach(func() { a.importFromClipboard() })
-	check(menu.Actions().Add(importAct))
-
-	exportAct := walk.NewAction()
-	check(exportAct.SetText("复制当前分享码"))
-	exportAct.Triggered().Attach(func() {
-		if err := a.exportToClipboard(); err != nil {
-			walk.MsgBox(a.owner(), appName, "生成分享码失败：\n"+err.Error(), walk.MsgBoxOK|walk.MsgBoxIconError)
-		}
-	})
-	check(menu.Actions().Add(exportAct))
-
-	logAct := walk.NewAction()
-	check(logAct.SetText("查看日志…"))
-	logAct.Triggered().Attach(a.showLogWindow)
-	check(menu.Actions().Add(logAct))
-
 	openAct := walk.NewAction()
-	check(openAct.SetText("打开数据目录"))
-	openAct.Triggered().Attach(a.openDataDir)
-	check(menu.Actions().Add(openAct))
-
-	check(menu.Actions().Add(walk.NewSeparatorAction()))
-
+	if err := openAct.SetText("打开界面"); err != nil {
+		return err
+	}
+	openAct.Triggered().Attach(a.showMainWindow)
+	if err := menu.Actions().Add(openAct); err != nil {
+		return err
+	}
 	quitAct := walk.NewAction()
-	check(quitAct.SetText("退出"))
+	if err := quitAct.SetText("退出"); err != nil {
+		return err
+	}
 	quitAct.Triggered().Attach(a.quitApp)
-	check(menu.Actions().Add(quitAct))
-
-	return buildErr
+	return menu.Actions().Add(quitAct)
 }
 
 // refreshUI 刷新托盘与主窗口的运行状态；必须在 UI 线程调用。
@@ -544,30 +440,6 @@ func (a *app) refreshUI() {
 		}
 	}
 
-	if a.toggleAction != nil {
-		switch {
-		case snap.Engine == nil:
-			setActionText(a.toggleAction, "启用宏（先导入或新建配置）")
-			setActionChecked(a.toggleAction, false)
-		case snap.Engine.Enabled():
-			setActionText(a.toggleAction, fmt.Sprintf("停用宏（%s）", keyName(snap.ToggleVK)))
-			setActionChecked(a.toggleAction, true)
-		default:
-			setActionText(a.toggleAction, fmt.Sprintf("启用宏（%s）", keyName(snap.ToggleVK)))
-			setActionChecked(a.toggleAction, false)
-		}
-	}
-	for i, act := range a.gameActions {
-		if i < len(games.All()) {
-			setActionChecked(act, games.All()[i].ID == a.settings.CurrentGame)
-		}
-	}
-	if snap.Engine != nil {
-		current := snap.Engine.ProfileIndex()
-		for i, act := range a.profileActions {
-			setActionChecked(act, i == current)
-		}
-	}
 	if a.win != nil {
 		a.win.refreshStatus()
 	}
@@ -587,29 +459,6 @@ func (a *app) afterStateChange() {
 	if a.win != nil {
 		a.win.loadFromState()
 	}
-}
-
-func setActionText(act *walk.Action, text string) {
-	if err := act.SetText(text); err != nil {
-		fmt.Println("[托盘] 设置菜单文本失败：", err)
-	}
-}
-
-func setActionChecked(act *walk.Action, checked bool) {
-	if err := act.SetChecked(checked); err != nil {
-		fmt.Println("[托盘] 设置菜单勾选失败：", err)
-	}
-}
-
-func (a *app) toggleFromUI() {
-	snap := a.st.snapshot()
-	if snap.Engine == nil {
-		walk.MsgBox(a.owner(), appName, "当前游戏还没有配置。\n\n在主窗口里编辑规则（改动即时生效），或从剪贴板导入分享码。",
-			walk.MsgBoxOK|walk.MsgBoxIconInformation)
-		return
-	}
-	a.log.Printf("[切换] %s → %s", keyName(snap.ToggleVK), onOffText(snap.Engine.Toggle()))
-	a.refreshUI()
 }
 
 // previewImportFromClipboard 读取剪贴板里的分享码并校验，返回给人看的预览文本。
@@ -666,22 +515,7 @@ func (a *app) applyImport(raw config.Raw, parsed *config.Parsed) error {
 	return nil
 }
 
-// importFromClipboard 是托盘入口：预览 + 原生确认框 + 应用；返回是否真正应用了配置。
-func (a *app) importFromClipboard() bool {
-	raw, parsed, preview, err := a.previewImportFromClipboard()
-	if err != nil {
-		walk.MsgBox(a.owner(), appName, err.Error(), walk.MsgBoxOK|walk.MsgBoxIconError)
-		return false
-	}
-	if walk.MsgBox(a.owner(), "导入分享码", preview, walk.MsgBoxYesNo|walk.MsgBoxIconInformation) != walk.DlgCmdYes {
-		return false
-	}
-	if err := a.applyImport(raw, parsed); err != nil {
-		walk.MsgBox(a.owner(), appName, err.Error(), walk.MsgBoxOK|walk.MsgBoxIconError)
-		return false
-	}
-	return true
-}
+
 
 // applyOptions 是应用配置时的可选项。
 type applyOptions struct {
@@ -752,9 +586,6 @@ func (a *app) applyConfig(raw *config.Raw, parsed *config.Parsed, opts applyOpti
 		Helpers:       a.settings.Helpers,
 		SlotVKs:       slotVKs,
 	})
-	if err := a.rebuildMenu(); err != nil {
-		a.log.Printf("[错误] 重建菜单失败：%v", err)
-	}
 	a.refreshUI()
 	if !opts.SkipUIReload && a.win != nil {
 		a.win.loadFromState()
@@ -790,29 +621,7 @@ func (a *app) switchProfile(i int) {
 	a.log.Printf("[切换] 方案 → %s", profileDisplayName(snap.Engine, i))
 }
 
-// exportToClipboard 把当前配置编码成分享码并写入剪贴板。
-// 只返回错误，不弹窗：错误怎么展示由调用方决定（托盘用 MsgBox，界面用提示条）。
-func (a *app) exportToClipboard() error {
-	snap := a.st.snapshot()
-	if snap.Raw == nil {
-		return fmt.Errorf("当前游戏还没有配置可导出：先编辑规则或导入一段分享码")
-	}
-	code, err := config.Encode(*snap.Raw)
-	if err != nil {
-		return fmt.Errorf("生成分享码失败：%v", err)
-	}
-	if err := walk.Clipboard().SetText(code); err != nil {
-		return fmt.Errorf("写入剪贴板失败：%v", err)
-	}
-	a.log.Printf("[导出] 分享码已复制（%d 字符，%s）", len(code), gameDisplayName(snap.GameID))
-	if a.ni != nil {
-		if err := a.ni.ShowInfo(appName, "分享码已复制到剪贴板（"+strconv.Itoa(len(code))+" 字符）"); err != nil {
-			a.log.Printf("[托盘] 气泡提示失败：%v", err)
-		}
-	}
-	return nil
-}
-
+// openDataDir 打开配置与日志所在目录（入口在日志窗口里，托盘不再承担操作）。
 func (a *app) openDataDir() {
 	if err := os.MkdirAll(a.dir, 0o755); err != nil {
 		walk.MsgBox(a.owner(), appName, "创建目录失败：\n"+err.Error(), walk.MsgBoxOK|walk.MsgBoxIconError)
@@ -1406,24 +1215,6 @@ func gameDisplayName(id string) string {
 		return g.Name
 	}
 	return id
-}
-
-func gameNames() []string {
-	all := games.All()
-	names := make([]string, 0, len(all))
-	for _, g := range all {
-		names = append(names, g.Name)
-	}
-	return names
-}
-
-func gameIndex(id string) int {
-	for i, g := range games.All() {
-		if g.ID == id {
-			return i
-		}
-	}
-	return -1
 }
 
 func onOffText(on bool) string {

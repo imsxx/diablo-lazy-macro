@@ -38,6 +38,7 @@ func (a *app) showLogWindow() {
 						a.log.Printf("[日志窗口] 已复制 %d 行到剪贴板", len(a.log.Lines()))
 					}},
 					decl.PushButton{Text: "刷新", OnClicked: func() { a.refreshLogWindow() }},
+					decl.PushButton{Text: "打开数据目录", OnClicked: func() { a.openDataDir() }},
 					decl.PushButton{Text: "清空显示", OnClicked: func() {
 						a.log.Clear()
 						a.refreshLogWindow()
