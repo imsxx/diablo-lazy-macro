@@ -228,6 +228,56 @@ body {
   color: #fff;
 }
 
+/* ================= 全局设置区（标题栏下方的通栏） ================= */
+/* 不随游戏、不随方案变化的功能统一放这里：启动方式、暂停/提示、快速暂停、悬浮窗显示方式 */
+.global-bar {
+  margin: 0 14px;
+  padding: 8px 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-main);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.global-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.global-label {
+  min-width: 56px;
+  color: var(--color-accent);
+  font-size: 12px;
+  font-weight: bold;
+  flex-shrink: 0;
+}
+
+.global-sep {
+  width: 1px;
+  height: 18px;
+  margin: 0 4px;
+  background: var(--border-main);
+  flex-shrink: 0;
+}
+
+/* 悬浮窗的显示方式（开关在标题栏）：关闭时整组置灰 */
+.hud-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 右栏占位：非暗黑3 时说明这里暂时没有额外功能 */
+.empty-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 /* ================= 主体双栏 ================= */
 .app-main {
   flex: 1;
