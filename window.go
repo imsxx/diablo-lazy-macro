@@ -208,7 +208,6 @@ type frontendState struct {
 	} `json:"helpers"`
 	AllHelpers         []helperMeta        `json:"allHelpers"`
 	SmartPause         bool                `json:"smartPause"`
-	SoundCue           bool                `json:"soundCue"`
 	ForceStandEnabled  bool                `json:"forceStandEnabled"`
 	ForceStandKey      string              `json:"forceStandKey"`
 	ForceStandKeyLabel string              `json:"forceStandKeyLabel"`
@@ -732,7 +731,7 @@ func (w *mainWindow) initBindings() {
 		return nil
 	})
 
-	bind("api_updatePreference", func(smart, sound, force bool, forceKey string) error {
+	bind("api_updatePreference", func(smart, force bool, forceKey string) error {
 		forceKey = strings.ToUpper(strings.TrimSpace(forceKey))
 		if forceKey != "" {
 			if _, err := keys.Parse(forceKey); err != nil {
@@ -740,16 +739,14 @@ func (w *mainWindow) initBindings() {
 			}
 		}
 		game := w.app.settings.CurrentGame
-		prevSmart, prevSound := w.app.settings.SmartPause, w.app.settings.SoundCue
+		prevSmart := w.app.settings.SmartPause
 		prevKeys := w.app.settings.GameKeyMap(game)
 		restore := func() {
 			w.app.settings.SmartPause = prevSmart
-			w.app.settings.SoundCue = prevSound
 			w.app.settings.SetGameKeyMap(game, prevKeys)
 		}
 
 		w.app.settings.SmartPause = smart
-		w.app.settings.SoundCue = sound
 		gk := w.app.settings.GameKeyMap(game)
 		gk.ForceStandEnabled = force
 		gk.ForceStandKey = forceKey
@@ -938,7 +935,6 @@ func (w *mainWindow) buildFrontendState() *frontendState {
 		ToggleKey:         config.DefaultToggleKey,
 		StartMode:         w.startMode,
 		SmartPause:        w.app.settings.SmartPause,
-		SoundCue:          w.app.settings.SoundCue,
 		TargetProcess:     w.app.targetProcessOf(w.app.settings.CurrentGame),
 	}
 

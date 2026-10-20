@@ -49,7 +49,7 @@ func TestFrontendStateJSONContract(t *testing.T) {
 		`"toggleKeyLabel"`, `"startMode"`,
 		`"helpers"`, `"hotkey"`, `"hotkeyLabel"`, `"enabled"`,
 		`"allHelpers"`, `"id"`, `"name"`,
-		`"smartPause"`, `"soundCue"`, `"forceStandEnabled"`, `"forceStandKey"`, `"forceStandKeyLabel"`,
+		`"smartPause"`, `"forceStandEnabled"`, `"forceStandKey"`, `"forceStandKeyLabel"`,
 		`"targetProcess"`,
 		`"engine"`, `"configured"`, `"status"`, `"statusText"`, `"holdMode"`, `"foreground"`,
 		`"hud"`,

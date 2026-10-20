@@ -371,7 +371,6 @@ function renderHelperSection() {
 function renderPreferences() {
   if (!state) return;
   setCheckedIfIdle($id('smartPauseCheck'), !!state.smartPause);
-  setCheckedIfIdle($id('soundCueCheck'), !!state.soundCue);
   setCheckedIfIdle($id('forceStandCheck'), !!state.forceStandEnabled);
 
   const standBtn = $id('forceStandKeyBtn');
@@ -664,7 +663,6 @@ async function savePreferences() {
   const r = await callApi(
     'api_updatePreference',
     $id('smartPauseCheck').checked,
-    $id('soundCueCheck').checked,
     $id('forceStandCheck').checked,
     state.forceStandKey || ''
   );
@@ -856,7 +854,7 @@ async function applyCapturedKey(target, token, label) {
       break;
     case 'forceStand':
       result = await callApi('api_updatePreference',
-        $id('smartPauseCheck').checked, $id('soundCueCheck').checked,
+        $id('smartPauseCheck').checked,
         $id('forceStandCheck').checked, token);
       break;
     case 'helperKey': {
