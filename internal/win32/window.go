@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"unsafe"
 
@@ -135,6 +136,40 @@ type ForegroundWindow struct {
 	ProcessID   uint32
 	ProcessName string
 	Elevated    bool
+}
+
+// fgProcCache 缓存「前台窗口 → 进程名」。主循环每 5–10ms 就要判断一次前台，
+// 而完整解析（标题 / 类名 / 进程名 / 令牌）一次约 40µs，直接每帧调用会白烧 1% 单核。
+var fgProcCache struct {
+	mu   sync.Mutex
+	hwnd uintptr
+	name string
+}
+
+// ForegroundProcessName 只返回前台窗口的进程名，hwnd 未变时复用缓存，成本约 1µs。
+// 需要标题/类名/令牌等完整信息时仍用 GetForegroundWindow。
+func ForegroundProcessName() (string, bool) {
+	hwnd, _, _ := procGetForegroundWindow.Call()
+	if hwnd == 0 {
+		return "", false
+	}
+	fgProcCache.mu.Lock()
+	defer fgProcCache.mu.Unlock()
+	if fgProcCache.hwnd == hwnd && fgProcCache.name != "" {
+		return fgProcCache.name, true
+	}
+	var pid uint32
+	_, _, _ = procGetWindowThreadProcessId.Call(hwnd, uintptr(unsafe.Pointer(&pid)))
+	if pid == 0 {
+		return "", false
+	}
+	name, err := processName(pid)
+	if err != nil {
+		return "", false
+	}
+	fgProcCache.hwnd = hwnd
+	fgProcCache.name = name
+	return name, true
 }
 
 // GetForegroundWindow 返回当前前台窗口信息，用于「只在游戏前台时发送」的保护与真实窗口信息采集。

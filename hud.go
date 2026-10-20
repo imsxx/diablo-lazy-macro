@@ -479,6 +479,9 @@ func (h *floatingHUD) update(snap runtimeSnapshot, foreground bool) {
 	}
 
 	h.mu.Lock()
+	prevStatus, prevTag, prevName := h.status, h.gameTag, h.profileName
+	prevForeground := h.foreground
+
 	h.foreground = foreground
 	h.gameTag = strings.ToUpper(snap.GameID)
 	if h.gameTag == "" {
@@ -500,12 +503,17 @@ func (h *floatingHUD) update(snap runtimeSnapshot, foreground bool) {
 	}
 	needShow := !h.visible
 	h.visible = true
+	// 只有内容真的变了才重绘：主循环每 5–10ms 调一次，无条件 Invalidate 会让 GDI 一直忙。
+	changed := needShow || prevStatus != h.status || prevTag != h.gameTag ||
+		prevName != h.profileName || prevForeground != h.foreground
 	h.mu.Unlock()
 
 	if needShow {
 		procShowWindow.Call(h.hwnd, uintptr(SW_SHOWNOACTIVATE))
 	}
-	procInvalidateRect.Call(h.hwnd, 0, 0)
+	if changed {
+		procInvalidateRect.Call(h.hwnd, 0, 0)
+	}
 }
 
 func (h *floatingHUD) paint(hwnd uintptr) {

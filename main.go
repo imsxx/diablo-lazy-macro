@@ -33,9 +33,9 @@ const (
 	appName = "Diablo Lazy Macro · 暗黑懒人宏"
 	version = "0.2.0-dev"
 	// idlePoll 是「没有待发按键时」的检测周期：启停键、方案切换键、快速暂停都靠它轮询。
-	// 真正要按键时不靠它定拍——引擎会给出下一条规则的到期时刻，循环睡到那一刻再醒，
-	// 所以 2ms/5ms 的间隔不会被向上取整成 10ms（精度交给系统定时器与游戏）。
-	idlePoll = 5 * time.Millisecond
+	// 10ms 对手按按键完全够（双击间隔都在 100ms 以上），而且不影响发送精度——
+	// 真正要按键时引擎会给出到期时刻，循环睡到那一刻再醒。
+	idlePoll = 10 * time.Millisecond
 )
 
 // winSender 把 internal/win32 的输入合成接入规则引擎。
@@ -889,8 +889,8 @@ func (a *app) startTicker() {
 				// 助手功能（暗黑3）：按快捷键触发，运行中再按一次打断
 				a.tickHelper(snap)
 
-				fg, err := win32.GetForegroundWindow()
-				foreground := err == nil && win32.MatchProcess(fg.ProcessName, snap.TargetProcess)
+				name, ok := win32.ForegroundProcessName()
+				foreground := ok && win32.MatchProcess(name, snap.TargetProcess)
 				snap.Engine.Tick(now, foreground)
 
 				if a.hud != nil {
