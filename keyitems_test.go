@@ -128,7 +128,7 @@ func TestCaptureOptionsMatchRules(t *testing.T) {
 func TestKeyNameCoversProtocolKeys(t *testing.T) {
 	cases := map[uint16]string{
 		0x01: "鼠标左键",
-		0x06: "侧键2",
+		0x06: "侧键·前进",
 		0x08: "退格",
 		0x0D: "回车",
 		0x26: "↑",

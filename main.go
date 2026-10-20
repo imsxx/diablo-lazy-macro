@@ -111,9 +111,6 @@ type app struct {
 	helperRunning    atomic.Bool
 	helperAbort      atomic.Bool
 
-	logDlg *walk.Dialog
-	logTe  *walk.TextEdit
-
 	notifyMu   sync.Mutex
 	lastNotify time.Time
 }
@@ -621,15 +618,15 @@ func (a *app) switchProfile(i int) {
 	a.log.Printf("[切换] 方案 → %s", profileDisplayName(snap.Engine, i))
 }
 
-// openDataDir 打开配置与日志所在目录（入口在日志窗口里，托盘不再承担操作）。
-func (a *app) openDataDir() {
+// openDataDir 打开配置与日志所在目录（入口在界面的日志浮层里，托盘不再承担操作）。
+func (a *app) openDataDir() error {
 	if err := os.MkdirAll(a.dir, 0o755); err != nil {
-		walk.MsgBox(a.owner(), appName, "创建目录失败：\n"+err.Error(), walk.MsgBoxOK|walk.MsgBoxIconError)
-		return
+		return fmt.Errorf("创建目录失败：%v", err)
 	}
 	if err := exec.Command("explorer", a.dir).Start(); err != nil {
-		walk.MsgBox(a.owner(), appName, "打开目录失败：\n"+err.Error(), walk.MsgBoxOK|walk.MsgBoxIconError)
+		return fmt.Errorf("打开目录失败：%v", err)
 	}
+	return nil
 }
 
 func (a *app) startTicker() {
@@ -913,7 +910,7 @@ func pickHelper(env *helper.Env, settings store.HelperSettings) (helper.Helper, 
 // quickPauseDoubleClickWindow 是双击判定的时间窗。
 const quickPauseDoubleClickWindow = 400 * time.Millisecond
 
-// quickPauseMouseVK 把设置里的鼠标键序号转成虚拟键码（1 左键 / 2 右键 / 3 中键 / 4 侧键1 / 5 侧键2）。
+// quickPauseMouseVK 把设置里的鼠标键序号转成虚拟键码（1 左键 / 2 右键 / 3 中键 / 4 侧键·后退 / 5 侧键·前进）。
 func quickPauseMouseVK(idx int) uint16 {
 	switch idx {
 	case 1:

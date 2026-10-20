@@ -260,6 +260,17 @@ function renderSlots() {
     // 整行悬浮说明：把「这个策略到底做什么」直接写在玩家眼前（旧版是分散的 ToolTip，新版集中到 Go 下发文案）
     row.title = slot.explanation || '';
 
+    // 与当前策略无关的列不再禁用，只做淡化：玩家可以先填数值再选策略，
+    // 灰到点不动会让人以为界面坏了。title 里说清「填了何时生效」。
+    const useInterval = slot.strategy === 2 || slot.strategy === 3;
+    const useDelay = slot.strategy === 2;
+    const strategyName = STRATEGY_NAMES[slot.strategy] || '禁用';
+    const intervalTitle = useInterval
+      ? '执行间隔（毫秒）：连点 / 保持Buff 的触发周期，最小 1ms'
+      : '执行间隔（毫秒）：当前策略是「' + strategyName + '」，改成「连点」或「保持Buff」后生效（可以先填）';
+    const delayTitle = '延迟区间（毫秒）：两个框分别是最小 / 最大延迟，只填一个时另一个自动补成相同值。';
+    const delayHint = useDelay ? '仅「连点」生效' : '当前策略是「' + strategyName + '」，改成「连点」后生效（可以先填）';
+
     row.innerHTML = `
       <span class="col-slot">${esc(slot.name || '')}</span>
       <span class="col-key">
@@ -273,20 +284,17 @@ function renderSlots() {
         </select>
       </span>
       <span class="col-interval">
-        <input type="number" class="input-num sm" data-slot="${idx}" data-field="interval"
-          value="${slot.intervalMS}" min="20" max="600000" title="执行间隔（毫秒）：连点/保持Buff 的触发周期"
-          ${slot.strategy === 2 || slot.strategy === 3 ? '' : 'disabled'}>
+        <input type="number" class="input-num sm${useInterval ? '' : ' inactive'}" data-slot="${idx}" data-field="interval"
+          value="${slot.intervalMS}" min="1" max="600000" title="${esc(intervalTitle)}">
       </span>
       <span class="col-delay">
-        <input type="number" class="input-num xs" data-slot="${idx}" data-field="delayMin"
+        <input type="number" class="input-num xs${useDelay ? '' : ' inactive'}" data-slot="${idx}" data-field="delayMin"
           value="${slot.delayMinMS || ''}" placeholder="最小" min="0" max="30000"
-          title="最小延迟（毫秒）：与「最大延迟」组成随机区间；只填这个时，另一个会自动补成相同值（固定延迟）"
-          ${slot.strategy === 2 ? '' : 'disabled'}>
+          title="${esc(delayTitle + delayHint)}">
         <span class="delay-sep">～</span>
-        <input type="number" class="input-num xs" data-slot="${idx}" data-field="delayMax"
+        <input type="number" class="input-num xs${useDelay ? '' : ' inactive'}" data-slot="${idx}" data-field="delayMax"
           value="${slot.delayMaxMS || ''}" placeholder="最大" min="-30000" max="30000"
-          title="最大延迟（毫秒）：正数在本周期内后延，负数推迟到周期末尾前；与「最小延迟」不同即区间随机"
-          ${slot.strategy === 2 ? '' : 'disabled'}>
+          title="${esc(delayTitle + delayHint)}">
       </span>
     `;
     container.appendChild(row);
@@ -764,8 +772,8 @@ function renderCaptureBox() {
     ['LMB', '鼠标左键'],
     ['RMB', '鼠标右键'],
     ['MMB', '鼠标中键'],
-    ['X1', '侧键1'],
-    ['X2', '侧键2'],
+    ['X1', '侧键·后退'],
+    ['X2', '侧键·前进'],
   ];
 
   let html = '<div class="capture-title">' + esc(opts.title || '请按下按键') + '</div>';
@@ -813,6 +821,12 @@ function bindOverlayDismiss() {
       if (e.target === confirmOverlay) closeConfirm(false);
     });
   }
+  const logOverlay = $id('logOverlay');
+  if (logOverlay) {
+    logOverlay.addEventListener('mousedown', (e) => {
+      if (e.target === logOverlay) closeLog();
+    });
+  }
 }
 
 async function handleKeyDown(e) {
@@ -820,6 +834,14 @@ async function handleKeyDown(e) {
     if (e.key === 'Escape') {
       e.preventDefault();
       closeConfirm(false);
+    }
+    return;
+  }
+  const logOverlay = $id('logOverlay');
+  if (logOverlay && logOverlay.style.display === 'flex') {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      closeLog();
     }
     return;
   }
@@ -921,8 +943,56 @@ async function exportCode() {
   showNotice('分享码已复制到剪贴板（' + len + ' 字符），可直接发给好友', 'ok');
 }
 
-function openLog() {
-  callApi('api_openLogWindow');
+// ---------------------------------------------------------------- 日志浮层
+
+// openLog 拉取日志全文并用界面内的浮层展示（不另开原生窗口，样式与主界面一致）。
+async function openLog() {
+  const r = await callApi('api_getLog');
+  if (!r.ok) return;
+  renderLog(r.value);
+  const overlay = $id('logOverlay');
+  if (overlay) overlay.style.display = 'flex';
+}
+
+function renderLog(data) {
+  const pathEl = $id('logPath');
+  if (pathEl) pathEl.textContent = (data && data.path) || '—';
+  const textEl = $id('logText');
+  if (textEl) {
+    textEl.textContent = (data && data.text) || '（暂无日志）';
+    textEl.scrollTop = textEl.scrollHeight; // 打开就看到最新一条
+  }
+}
+
+function closeLog() {
+  const overlay = $id('logOverlay');
+  if (overlay) overlay.style.display = 'none';
+}
+
+async function refreshLog() {
+  const r = await callApi('api_getLog');
+  if (!r.ok) return;
+  renderLog(r.value);
+  showNotice('日志已刷新', 'ok');
+}
+
+async function copyLog() {
+  const r = await callApi('api_copyLog');
+  if (!r.ok) return;
+  showNotice('日志已复制到剪贴板，直接贴给我们即可', 'ok');
+}
+
+async function clearLog() {
+  const r = await callApi('api_clearLog');
+  if (!r.ok) return;
+  await refreshLog();
+  showNotice('已清空当前日志', 'ok');
+}
+
+async function openDataDir() {
+  const r = await callApi('api_openDataDir');
+  if (!r.ok) return;
+  showNotice('已打开数据目录', 'ok');
 }
 
 // 最小化 = 收起（隐藏到托盘）：宏继续跑，双击托盘图标恢复。

@@ -477,6 +477,16 @@ body {
   padding: 6px;
 }
 
+/* 与当前策略无关的列：淡化但仍可编辑（填了数值，切换策略后立即生效） */
+.input-num.inactive {
+  opacity: 0.45;
+}
+
+.input-num.inactive:hover,
+.input-num.inactive:focus {
+  opacity: 1;
+}
+
 .input-num.xs { width: 56px; text-align: center; }
 .input-num.sm { width: 72px; text-align: center; }
 .input-num.md { width: 88px; text-align: center; }
@@ -806,6 +816,37 @@ body {
   gap: 8px;
   justify-content: center;
   margin-top: 14px;
+}
+
+/* 日志浮层：等宽字体 + 可选中（全局关掉了 user-select，这里必须单独放开） */
+.log-box {
+  width: 820px;
+  max-width: 820px;
+}
+
+.log-path {
+  margin-top: 6px;
+  color: var(--color-text-muted);
+  font-size: 11px;
+  text-align: left;
+  word-break: break-all;
+}
+
+.log-text {
+  margin-top: 8px;
+  max-height: 360px;
+  overflow: auto;
+  padding: 8px 10px;
+  background: #0f1115;
+  border: 1px solid var(--border-main);
+  color: var(--color-text-sub);
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 11px;
+  line-height: 1.65;
+  text-align: left;
+  white-space: pre-wrap;
+  word-break: break-all;
+  user-select: text;
 }
 
 /* 二级确认浮层的说明文字：把后果讲清楚，别让人靠猜 */

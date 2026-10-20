@@ -320,8 +320,12 @@ func TestUIClampLimitsWithinProtocol(t *testing.T) {
 		t.Fatalf("clampDelay(0) 应为 0：%d", got)
 	}
 
-	if got := clampInterval(1, 300); got != 300 {
-		t.Fatalf("间隔低于下限应保持原值：%d", got)
+	if got := clampInterval(0, 300); got != 300 {
+		t.Fatalf("间隔为 0（未填）时应回退原值：%d", got)
+	}
+	// 界面下限必须与协议一致（1ms）：填 2ms 不能被悄悄换回原值。
+	if got := clampInterval(2, 300); got != 2 {
+		t.Fatalf("2ms 是合法间隔，不应被替换：%d", got)
 	}
 	if got := clampInterval(600001, 300); got != 600000 {
 		t.Fatalf("间隔上限未被夹取：%d", got)

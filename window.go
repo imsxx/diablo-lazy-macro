@@ -172,6 +172,12 @@ type helperMeta struct {
 	Name string `json:"name"`
 }
 
+// logView 是日志浮层要展示的内容：文件路径 + 当前全文。
+type logView struct {
+	Path string `json:"path"`
+	Text string `json:"text"`
+}
+
 // frontendEngineState 是宏运行态：状态模型与文案都由 status.go 统一产出，
 // 主窗口底栏与游戏悬浮窗因此不可能各说一套。
 type frontendEngineState struct {
@@ -859,9 +865,29 @@ func (w *mainWindow) initBindings() {
 		return code, nil
 	})
 
-	bind("api_openLogWindow", func() error {
-		w.app.showLogWindow()
+	// 日志在界面内以浮层展示：复用主界面的样式与提示条，不再另开一个原生窗口。
+	bind("api_getLog", func() (logView, error) {
+		return logView{
+			Path: w.app.log.FilePath(),
+			Text: strings.Join(w.app.log.Lines(), "\r\n"),
+		}, nil
+	})
+
+	bind("api_copyLog", func() error {
+		if err := walk.Clipboard().SetText(strings.Join(w.app.log.Lines(), "\r\n")); err != nil {
+			return fmt.Errorf("写入剪贴板失败：%v", err)
+		}
+		w.app.log.Printf("[日志] 已复制全文到剪贴板")
 		return nil
+	})
+
+	bind("api_clearLog", func() error {
+		w.app.log.Clear()
+		return nil
+	})
+
+	bind("api_openDataDir", func() error {
+		return w.app.openDataDir()
 	})
 
 	bind("api_minimize", func() error {
@@ -1350,7 +1376,8 @@ func clampDelayMin(v, max int) int {
 }
 
 func clampInterval(v, fallback int) int {
-	if v < 20 {
+	// 下限与协议一致（1ms）：界面不能比协议更严，否则填 2ms 会被悄悄换回原值。
+	if v < 1 {
 		return fallback
 	}
 	if v > 600000 {

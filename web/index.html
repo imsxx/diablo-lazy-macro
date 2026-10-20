@@ -126,8 +126,8 @@
               <option value="1">左键</option>
               <option value="2">右键</option>
               <option value="3">中键</option>
-              <option value="4">侧键1</option>
-              <option value="5">侧键2</option>
+              <option value="4">侧键·后退</option>
+              <option value="5">侧键·前进</option>
             </select>
             <span class="form-text">则</span>
             <select class="select-dropdown lg" id="qpAction" onchange="saveQuickPause()" title="暂停期间的行为">
@@ -281,6 +281,22 @@
       <div class="capture-actions">
         <button class="tool-btn" onclick="closeConfirm(false)">取消</button>
         <button class="tool-btn danger" id="confirmOkBtn" onclick="closeConfirm(true)">确认</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 运行日志浮层：与主界面同一套样式，可滚动、可选中复制 -->
+  <div class="capture-overlay" id="logOverlay" style="display: none;">
+    <div class="capture-box log-box">
+      <div class="capture-title">运行日志</div>
+      <div class="log-path" id="logPath">—</div>
+      <pre class="log-text" id="logText"></pre>
+      <div class="capture-actions">
+        <button class="tool-btn" onclick="copyLog()">复制全部</button>
+        <button class="tool-btn" onclick="refreshLog()">刷新</button>
+        <button class="tool-btn" onclick="clearLog()">清空</button>
+        <button class="tool-btn" onclick="openDataDir()">打开数据目录</button>
+        <button class="tool-btn" onclick="closeLog()">关闭</button>
       </div>
     </div>
   </div>

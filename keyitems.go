@@ -246,10 +246,11 @@ func keyName(vk uint16) string {
 		return "鼠标右键"
 	case keys.VKMiddleMouse:
 		return "鼠标中键"
+	// 用前进/后退而不是「侧键1/2」：玩家看到键帽就知道该按哪一个，不用去试。
 	case keys.VKXButton1:
-		return "侧键1"
+		return "侧键·后退"
 	case keys.VKXButton2:
-		return "侧键2"
+		return "侧键·前进"
 
 	case 0x08:
 		return "退格"

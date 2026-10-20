@@ -59,7 +59,7 @@ const (
 type QuickPauseSettings struct {
 	Enabled  bool `json:"enabled,omitempty"`
 	Trigger  int  `json:"trigger,omitempty"`   // QuickPauseDoubleClick / SingleClick / Hold
-	MouseKey int  `json:"mouse_key,omitempty"` // 1 左键 2 右键 3 中键 4 侧键1 5 侧键2
+	MouseKey int  `json:"mouse_key,omitempty"` // 1 左键 2 右键 3 中键 4 侧键·后退 5 侧键·前进
 	Action   int  `json:"action,omitempty"`    // QuickPauseActionPause / ClickLeft
 	DelayMS  int  `json:"delay_ms,omitempty"`  // 单击 / 双击模式下的暂停时长
 }
@@ -259,7 +259,7 @@ func (q QuickPauseSettings) Validate() error {
 		return fmt.Errorf("快速暂停的触发方式取值 %d 无效（1 双击 / 2 单击 / 3 压住）", q.Trigger)
 	}
 	if q.MouseKey < 1 || q.MouseKey > 5 {
-		return fmt.Errorf("快速暂停的鼠标键取值 %d 无效（1 左键 / 2 右键 / 3 中键 / 4 侧键1 / 5 侧键2）", q.MouseKey)
+		return fmt.Errorf("快速暂停的鼠标键取值 %d 无效（1 左键 / 2 右键 / 3 中键 / 4 侧键·后退 / 5 侧键·前进）", q.MouseKey)
 	}
 	if q.Action < QuickPauseActionPause || q.Action > QuickPauseActionClickLeft {
 		return fmt.Errorf("快速暂停的行为取值 %d 无效（1 暂停宏 / 2 暂停宏且连点左键）", q.Action)
