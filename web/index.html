@@ -5,9 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Diablo Lazy Macro</title>
   <link rel="stylesheet" href="style.css">
+
 </head>
 <body>
-  <!-- 顶栏：自定义无边框拖拽标题栏 + 窗口控制 -->
+  <!-- 顶栏：全局功能区（游戏 / 启停键 / 悬浮窗 / 分享码 / 日志）+ 窗口控制 -->
   <header class="app-header" id="appHeader">
     <div class="header-brand">
       <span class="brand-title">暗黑懒人宏</span>
@@ -22,10 +23,14 @@
 
     <!-- 全局战斗宏启动快捷键 (通用全局控件) -->
     <div class="header-macro-toggle">
-      <span class="header-macro-label">战斗宏启停：</span>
+      <span class="header-macro-label">启停键：</span>
       <button class="keycap-btn highlight header-keycap" id="toggleKeyBtn"
         onclick="captureToggleKey()" title="点击修改战斗宏启停快捷键">X1</button>
     </div>
+
+    <!-- 全局功能：悬浮窗开关（任何游戏都用，所以放顶栏） -->
+    <button class="tool-btn hud-toggle" id="hudToggleBtn" onclick="toggleHUD()"
+      title="切换在场游戏悬浮指示器">悬浮窗</button>
 
     <!-- 快捷工具按钮组 -->
     <div class="header-tools">
@@ -42,50 +47,47 @@
   <!-- 提示条：保存失败、导入结果、键位绑定反馈都走这里，不再静默 -->
   <div class="notice-bar" id="noticeBar" style="display: none;"></div>
 
-  <!-- 主体工作区：左右双栏对称仪表盘 -->
+  <!-- 主体工作区：左栏=按键配置，右栏=额外功能 -->
   <main class="app-main">
-    <!-- ================= 左栏：技能方案工作区 ================= -->
+    <!-- ================= 左栏：本配置的按键设置 ================= -->
     <section class="column-left">
-      <!-- 方案设置工作区 (Tab标签与配置卡片一体化连接) -->
       <div class="macro-section">
-        <!-- 方案 Tab 导航 (紧密咬合下方卡片，无任何断开线) -->
         <!-- 标签与末尾的「+」都由 JS 按后端下发的方案数量渲染（默认只有 1 个，加号新增，上限 4） -->
         <div class="profile-tabs" id="profileTabs"></div>
 
-        <!-- 按键宏设置卡片 -->
+        <!-- 技能槽位表 -->
         <div class="card macro-card">
-          <!-- 表头行 -->
           <div class="slot-header">
             <span class="col-slot">技能槽位</span>
             <span class="col-key">快捷键</span>
             <span class="col-strategy" title="禁用=不自动触发；按住不放=持续按住；连点=按间隔重复；保持Buff=屏幕找色守卫（暗黑3）">释放策略</span>
-            <span class="col-interval" title="连点与保持Buff 的触发周期（毫秒）">执行间隔 (ms)</span>
+            <span class="col-interval" title="连点与保持Buff 的触发周期（毫秒），最小 1ms">执行间隔 (ms)</span>
             <span class="col-delay" title="延迟区间 (ms)：最小/最大。只填一个，另一个会在失焦或回车后自动补成相同值（即固定延迟）；两个不同则在区间内随机；都空＝不延迟。仅「连点」生效">延迟区间 (ms)</span>
           </div>
 
-          <!-- 6 行槽位容器 (动态渲染) -->
           <div class="slot-list" id="slotList">
             <!-- 由 JS 渲染 6 行槽位 -->
           </div>
 
           <div class="card-hints">
             <div class="hint-line">快捷键按钮点击后按任意键即可录入（Esc 取消）；支持鼠标左/右/中键与侧键。</div>
-            <div class="hint-line">延迟：正数在周期内延后、负数推迟到周期末尾前；与所选策略无关的列会自动置灰。</div>
+            <div class="hint-line">延迟：正数在周期内延后、负数推迟到周期末尾前；与所选策略无关的列会淡化显示，但仍可先填。</div>
             <div class="hint-line">策略为「禁用」的槽位不写入配置：改键位只在本次运行内保留，启用策略后才会落盘。</div>
           </div>
         </div>
       </div>
 
-      <!-- 额外设置卡片 -->
+      <!-- 本配置（方案级）设置 -->
       <div class="card extra-card">
-        <div class="card-title">额外设置</div>
+        <div class="card-title">本配置</div>
         <div class="extra-row">
           <div class="form-item">
-            <span class="form-label">快速切换至本配置：</span>
-            <button class="keycap-btn sm" id="profileHkBtn" onclick="captureProfileHk()">无</button>
+            <span class="form-label">切换键：</span>
+            <button class="keycap-btn sm" id="profileHkBtn" onclick="captureProfileHk()"
+              title="游戏中按此键秒切本方案（仅键盘键）">无</button>
           </div>
           <div class="form-item">
-            <span class="form-label">配置名：</span>
+            <span class="form-label">名称：</span>
             <input type="text" class="input-text sm" id="profileNameInput" onchange="saveProfileName()" maxlength="24" placeholder="配置 1">
             <button class="tool-btn xs danger" id="deleteProfileBtn" onclick="deleteProfile()"
               title="删除当前配置（需二次确认）">删除</button>
@@ -99,24 +101,51 @@
             </select>
           </div>
         </div>
+      </div>
+    </section>
 
-        <div class="extra-row">
+    <!-- ================= 右栏：额外功能（全局运行设置 / 悬浮窗 / 助手） ================= -->
+    <section class="column-right">
+
+      <!-- 宏运行（全局）：启动方式、暂停与提示 -->
+      <div class="card pref-card">
+        <div class="card-title">宏运行</div>
+        <div class="pref-list">
           <div class="form-item">
-            <span class="form-label">宏启动方式：</span>
+            <span class="form-label">启动方式：</span>
             <select class="select-dropdown lg" id="startModeSelect" onchange="saveStartMode()"
               title="懒人模式：按一下启停键切换开/关；仅按下时：按住启停键期间才生效">
               <option value="0">懒人模式 (开关切换)</option>
               <option value="1">仅按下时 (按住生效)</option>
             </select>
           </div>
-        </div>
 
-        <div class="extra-row">
-          <div class="form-item flex-grow">
-            <label class="checkbox-label">
-              <input type="checkbox" id="qpEnabled" onchange="saveQuickPause()">
-              <span>快速暂停：</span>
+          <label class="checkbox-label" title="Tab 暂停/恢复；回车(打字)、T(回城)、M(地图) 自动停止宏">
+            <input type="checkbox" id="smartPauseCheck" onchange="savePreferences()">
+            <span>智能暂停 (Tab/回车/T/M)</span>
+          </label>
+          <div class="pref-desc">按 Tab 暂停/恢复；回车(打字)、T(回城)、M(地图) 自动停止宏</div>
+
+          <label class="checkbox-label" title="按热键切换配置成功时播放提示音">
+            <input type="checkbox" id="soundCueCheck" onchange="savePreferences()">
+            <span>快捷键切换配置成功时播放提示音</span>
+          </label>
+
+          <div class="pref-force-stand">
+            <label class="checkbox-label" title="连点左键技能前先按住站立键，避免角色走动（暗黑3）">
+              <input type="checkbox" id="forceStandCheck" onchange="saveForceStand()">
+              <span>连点左键自动按住站立键：</span>
             </label>
+            <button class="keycap-btn sm" id="forceStandKeyBtn" onclick="captureForceStandKey()">Shift</button>
+          </div>
+
+          <div class="pref-separator"></div>
+
+          <label class="checkbox-label" title="用鼠标键临时停手（暂停按键宏或暂停并连点左键）">
+            <input type="checkbox" id="qpEnabled" onchange="saveQuickPause()">
+            <span>快速暂停</span>
+          </label>
+          <div class="pref-qp">
             <select class="select-dropdown xs" id="qpTrigger" onchange="saveQuickPause()" title="鼠标键的触发方式">
               <option value="1">双击</option>
               <option value="2">单击</option>
@@ -129,21 +158,40 @@
               <option value="4">侧键·后退</option>
               <option value="5">侧键·前进</option>
             </select>
-            <span class="form-text">则</span>
-            <select class="select-dropdown lg" id="qpAction" onchange="saveQuickPause()" title="暂停期间的行为">
+            <select class="select-dropdown md" id="qpAction" onchange="saveQuickPause()" title="暂停期间的行为">
               <option value="1">暂停按键宏</option>
               <option value="2">暂停且连点左键</option>
             </select>
             <input type="number" class="input-num xs" id="qpDelay" onchange="saveQuickPause()" min="500" max="5000"
-              placeholder="1500" title="单击/双击模式的暂停时长（500–5000 毫秒）">
-            <span class="form-text">ms</span>
+              placeholder="1500" title="暂停时长（500–5000 毫秒）；留空表示暂停到手动恢复">
           </div>
         </div>
       </div>
-    </section>
 
-    <!-- ================= 右栏：全局总控与偏好 ================= -->
-    <section class="column-right">
+      <!-- 悬浮窗：开关在顶栏，这里只放显示方式 -->
+      <div class="card pref-card">
+        <div class="card-title">悬浮窗</div>
+        <div class="pref-list">
+          <div class="pref-hud-options" id="hudOptionsRow">
+            <span class="form-label">形态：</span>
+            <select class="select-dropdown xs" id="hudModeSelect" onchange="saveHUDSettings()">
+              <option value="bar">战术横条</option>
+              <option value="badge">紧凑方标</option>
+            </select>
+            <label class="checkbox-label sm">
+              <input type="checkbox" id="hudLockedCheck" onchange="saveHUDSettings()">
+              <span>锁定位置</span>
+            </label>
+            <label class="checkbox-label sm"
+              title="勾选后只在游戏位于前台时出现。看不到悬浮窗时，先取消这个勾选">
+              <input type="checkbox" id="hudGameOnlyCheck" onchange="saveHUDSettings()">
+              <span>仅前台显示</span>
+            </label>
+            <button class="tool-btn xs" onclick="resetHUDPos()" title="悬浮窗若移出屏幕可一键复位">重置位置</button>
+          </div>
+          <div class="pref-desc">开关在顶栏「悬浮窗」按钮；默认出现在屏幕左上角（80,80），可拖拽记忆位置。双击呼出主窗口，右键弹出快捷菜单。看不到时先取消「仅前台显示」，或点「重置位置」</div>
+        </div>
+      </div>
 
       <!-- 辅助功能卡片 (暗黑3下显示完整功能，非暗黑3下纯净隐藏) -->
       <div class="card helper-card" id="helperCard">
@@ -193,60 +241,6 @@
         </div>
 
         <div class="helper-note">* 城镇助手要求游戏窗口化或无边框窗口化运行；默认全部关闭，仅在当前界面命中时才动作。</div>
-      </div>
-
-      <!-- 操作偏好与防护卡片 -->
-      <div class="card pref-card">
-        <div class="card-title">操作偏好与防护</div>
-        <div class="pref-list">
-          <label class="checkbox-label" title="Tab 暂停/恢复；回车(打字)、T(回城)、M(地图) 自动停止宏">
-            <input type="checkbox" id="smartPauseCheck" onchange="savePreferences()">
-            <span>智能暂停 (Tab/回车/T/M)</span>
-          </label>
-          <div class="pref-desc">按 Tab 暂停/恢复；回车(打字)、T(回城)、M(地图) 自动停止宏</div>
-
-          <label class="checkbox-label" title="按热键切换配置成功时播放提示音">
-            <input type="checkbox" id="soundCueCheck" onchange="savePreferences()">
-            <span>快捷键切换配置成功时播放提示音</span>
-          </label>
-
-          <div class="pref-force-stand">
-            <label class="checkbox-label" title="连点左键技能前先按住站立键，避免角色走动（暗黑3）">
-              <input type="checkbox" id="forceStandCheck" onchange="saveForceStand()">
-              <span>连点左键自动按住站立键：</span>
-            </label>
-            <button class="keycap-btn sm" id="forceStandKeyBtn" onclick="captureForceStandKey()">Shift</button>
-          </div>
-
-          <div class="pref-separator"></div>
-
-          <div class="pref-hud-section">
-            <div class="pref-hud-header">
-              <label class="checkbox-label" title="在游戏画面上显示宏状态的小浮窗">
-                <input type="checkbox" id="hudEnabledCheck" onchange="saveHUDSettings()">
-                <span>在场游戏悬浮指示器</span>
-              </label>
-              <button class="tool-btn xs" onclick="resetHUDPos()" title="悬浮窗若移出屏幕可一键复位">重置位置</button>
-            </div>
-            <div class="pref-hud-options" id="hudOptionsRow">
-              <span class="form-label">形态：</span>
-              <select class="select-dropdown sm" id="hudModeSelect" onchange="saveHUDSettings()">
-                <option value="bar">战术横条</option>
-                <option value="badge">紧凑方标</option>
-              </select>
-              <label class="checkbox-label sm">
-                <input type="checkbox" id="hudLockedCheck" onchange="saveHUDSettings()">
-                <span>锁定位置</span>
-              </label>
-              <label class="checkbox-label sm"
-                title="勾选后只在游戏位于前台时出现。看不到悬浮窗时，先取消这个勾选">
-                <input type="checkbox" id="hudGameOnlyCheck" onchange="saveHUDSettings()">
-                <span>仅前台显示</span>
-              </label>
-            </div>
-            <div class="pref-desc">默认出现在屏幕左上角（80,80），可拖拽记忆位置；双击呼出主窗口，右键弹出快捷菜单。看不到时先取消「仅前台显示」，或点「重置位置」</div>
-          </div>
-        </div>
       </div>
     </section>
   </main>

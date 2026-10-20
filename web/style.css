@@ -169,6 +169,13 @@ body {
   border-color: #404454;
 }
 
+/* 顶栏的全局开关（悬浮窗）：开启时用强调色，与「导入/复制/日志」这类动作按钮区分开 */
+.tool-btn.hud-toggle.active {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+  background: #2a2214;
+}
+
 /* 破坏性操作按钮（删除配置等）：红色描边，避免和普通按钮混在一起 */
 .tool-btn.danger {
   border-color: #7f1d1d;
@@ -244,6 +251,21 @@ body {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  /* 额外功能可能不止一屏（助手只在暗黑3 出现），允许纵向滚动而不是把内容裁掉 */
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.column-right::-webkit-scrollbar {
+  width: 6px;
+}
+
+.column-right::-webkit-scrollbar-thumb {
+  background: #2a2d36;
+}
+
+.column-right::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 /* 卡片基类 (纯硬质直角边缘) */
@@ -658,6 +680,15 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
+  padding-left: 21px;
+  white-space: nowrap;
+}
+
+/* 快速暂停：右栏较窄，拆成「开关一行 + 参数一行」 */
+.pref-qp {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   padding-left: 21px;
   white-space: nowrap;
 }
