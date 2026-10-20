@@ -1,6 +1,6 @@
-// Package config 实现分享码协议 v2 的解析、编码与校验（契约文档：docs/share-code.md）。
+// Package config 实现分享码协议 v4 的解析、编码与校验（契约文档：docs/share-code.md）。
 // 解析必须 Fail Fast：任何不合法输入整段拒绝，禁止部分应用或静默降级。
-// 向后兼容：仍可解析 v1 分享码（旧码导入后按当前版本重新导出）。
+// 向后兼容：仍可解析 v1–v3 分享码（旧码导入后按当前版本重新导出）。
 package config
 
 import (
@@ -18,9 +18,9 @@ import (
 
 const (
 	// Prefix 是当前版本分享码前缀，字母大小写不敏感；其后为 base64url 编码的紧凑 JSON。
-	Prefix = "DLM3:"
+	Prefix = "DLM4:"
 	// Version 是当前协议版本。
-	Version = 3
+	Version = 4
 	// MinVersion 是仍可解析的最旧协议版本（旧分享码与旧存档可继续使用）。
 	MinVersion = 1
 
@@ -46,9 +46,9 @@ const (
 
 // DefaultToggleKey 是启停键的默认值：鼠标侧键 1（X1）。
 //
-// 选它而不是键盘功能键，依据是三款暗黑游戏的默认键位：
-// 暗黑3 的 F1 是「收藏」、F2–F12 虽未绑定但位置偏远；Shift 在暗黑2/3/4 都是「强制站立」；
-// 而三款游戏的默认键位都不会占用鼠标额外按键。侧键在「仅按下时」的启动方式下也比键盘功能键省力。
+// 选它而不是键盘功能键，依据是暗黑3/4 的默认键位：
+// 暗黑3 的 F1 是「收藏」、F2–F12 虽未绑定但位置偏远；Shift 在暗黑3/4 都是「强制站立」；
+// 而两款游戏的默认键位都不会占用鼠标额外按键。侧键在「仅按下时」的启动方式下也比键盘功能键省力。
 const DefaultToggleKey = "X1"
 
 // 触发模式：决定连点类技能是各自独立计时，还是按槽位顺序一轮一轮触发。
@@ -264,8 +264,10 @@ func resolve(raw *Raw) (*Parsed, error) {
 		if err := checkName(fmt.Sprintf("方案 #%d 名称", pi+1), rp.Name); err != nil {
 			return nil, err
 		}
-		if len(rp.Rules) < 1 || len(rp.Rules) > maxRulesPerProfile {
-			return nil, fmt.Errorf("方案 #%d 的规则数量必须在 1–%d 之间，实际 %d", pi+1, maxRulesPerProfile, len(rp.Rules))
+		// 空方案（0 条规则）合法：玩家新增的配置在填好技能前不按任何键，
+		// 比用一条 tap:1 占位更安全。
+		if len(rp.Rules) > maxRulesPerProfile {
+			return nil, fmt.Errorf("方案 #%d 的规则数量不能超过 %d 条，实际 %d", pi+1, maxRulesPerProfile, len(rp.Rules))
 		}
 		mode, err := normalizeMode(pi+1, rp.Mode)
 		if err != nil {

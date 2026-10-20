@@ -1,7 +1,7 @@
 //go:build windows
 
 // Diablo Lazy Macro 桌面执行器：主窗口 + 托盘常驻 + 全局热键 + 分享码导入/导出 + 日志。
-// 支持暗黑破坏神4 / 暗黑破坏神3 / 暗黑破坏神2：重制版，各自独立配置。
+// 支持暗黑破坏神4 / 暗黑破坏神3，各自独立配置。
 // 唯一底线：不做无人值守的挂机与全自动打怪。
 // 技术约束：不读游戏内存、不注入进程、不加载驱动；只合成键鼠输入，屏幕识别仅用公开的截图/取色；仅在目标游戏位于前台时发送。
 package main
@@ -1415,15 +1415,15 @@ func onOffText(on bool) string {
 }
 
 // defaultConfig 是新建配置的起手模板：固定 4 个方案，开箱即用。
-// defaultConfig 是新游戏的起始配置：只有一个方案，其余方案由玩家在界面 tab 尾部点「+」新增。
+// defaultConfig 是新游戏的起始配置：只有一个空方案，其余方案由玩家在界面 tab 尾部点「+」新增。
 // 刻意不做「内置方案预设」：每套 BD 用哪些技能、技能放在哪个键位都不确定，
-// 预设只会逼玩家先删掉一堆用不上的配置。
+// 预设只会逼玩家先删掉一堆用不上的配置；空方案在玩家填好技能前不按任何键。
 func defaultConfig() config.Raw {
 	return config.Raw{
 		Version: config.Version,
 		Profiles: []config.RawProfile{{
 			Name:  "配置 1",
-			Rules: []config.RawRule{{Trigger: "t", Action: "tap:1", IntervalMS: 250}},
+			Rules: []config.RawRule{},
 		}},
 	}
 }

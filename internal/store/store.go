@@ -209,8 +209,21 @@ func DefaultSettings() *Settings {
 // 直接校验会失败，因此加载后先按默认值填平。
 func (s *Settings) applyDefaults() {
 	d := DefaultQuickPause()
-	if s.CurrentGame == "" {
+	// 首次启动（空值）与「当前游戏已从工具中移除」（如暗黑2R）都回落到默认游戏（暗黑4）。
+	if _, ok := games.Lookup(s.CurrentGame); !ok {
 		s.CurrentGame = games.Default().ID
+	}
+	// 顺带清理属于已下架游戏的进程覆盖与按键映射，否则整份设置会因「未知游戏」被拒绝加载，
+	// 玩家升级后直接启动失败。
+	for id := range s.Processes {
+		if _, ok := games.Lookup(id); !ok {
+			delete(s.Processes, id)
+		}
+	}
+	for id := range s.GameKeys {
+		if _, ok := games.Lookup(id); !ok {
+			delete(s.GameKeys, id)
+		}
 	}
 	if s.QuickPause.Trigger == 0 {
 		s.QuickPause.Trigger = d.Trigger

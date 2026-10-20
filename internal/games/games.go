@@ -48,7 +48,8 @@ type Game struct {
 }
 
 // adapters 是受支持游戏的唯一注册表；顺序即界面展示顺序，首个为默认游戏。
-var adapters = []Adapter{d4Adapter{}, d3Adapter{}, d2rAdapter{}}
+// 暗黑破坏神2：重制版 不需要技能宏，已从工具中整体移除（2026-10-20）。
+var adapters = []Adapter{d4Adapter{}, d3Adapter{}}
 
 // All 返回全部受支持游戏（副本，避免外部修改内部表）。
 func All() []Game {

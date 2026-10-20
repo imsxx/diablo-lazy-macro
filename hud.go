@@ -144,7 +144,7 @@ type floatingHUD struct {
 	mu   sync.Mutex
 
 	// 运行时状态快照
-	gameTag     string // "D3", "D4", "D2R"
+	gameTag     string // "D3", "D4"
 	profileName string // "配置 1"
 	profileIdx  int    // 0..3
 	status      int    // engineStatus 的取值：0 就绪 / 1 运行中 / 2 已暂停 / 3 休眠

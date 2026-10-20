@@ -35,7 +35,7 @@ var named = map[string]uint16{
 	"M4":  VKXButton1,
 	"M5":  VKXButton2,
 
-	// 修饰键：无前缀写法等价于左侧键（三款暗黑游戏的「强制站立」默认都是左 Shift）。
+	// 修饰键：无前缀写法等价于左侧键（暗黑3/4 的「强制站立」默认都是左 Shift）。
 	"SHIFT":  VKLeftShift,
 	"LSHIFT": VKLeftShift,
 	"RSHIFT": VKRightShift,

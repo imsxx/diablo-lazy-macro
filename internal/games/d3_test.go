@@ -157,7 +157,7 @@ func TestOtherGamesHaveNoBuffGuard(t *testing.T) {
 		w: 3440, h: 1440, rectOK: true,
 		pixels: map[[2]int32][3]uint8{{1291, 1328}: {0, 255, 0}},
 	}
-	for _, id := range []string{"d4", "d2r"} {
+	for _, id := range []string{"d4"} {
 		a, ok := For(id)
 		if !ok {
 			t.Fatalf("适配器 %s 未注册", id)
@@ -181,7 +181,7 @@ func TestForceStandCapabilities(t *testing.T) {
 		t.Errorf("暗黑3 应对鼠标左键应用强制站立，实际 %v", keys)
 	}
 	// 其余游戏尚未实测，不擅自启用。
-	for _, id := range []string{"d4", "d2r"} {
+	for _, id := range []string{"d4"} {
 		a, ok := For(id)
 		if !ok {
 			t.Fatalf("适配器 %s 未注册", id)
@@ -196,11 +196,18 @@ func TestForceStandCapabilities(t *testing.T) {
 }
 
 func TestAdapterRegistryConsistency(t *testing.T) {
-	if len(All()) != 3 {
-		t.Fatalf("预期注册 3 款游戏，实际 %d", len(All()))
+	if len(All()) != 2 {
+		t.Fatalf("预期注册 2 款游戏（暗黑4 / 暗黑3），实际 %d", len(All()))
+	}
+	// 展示顺序即注册顺序：暗黑4 在前，首次启动默认暗黑4。
+	if All()[0].ID != "d4" || All()[1].ID != "d3" {
+		t.Errorf("游戏顺序应为 d4、d3，实际 %s、%s", All()[0].ID, All()[1].ID)
 	}
 	if Default().ID != "d4" {
 		t.Errorf("默认游戏应为 d4，实际 %s", Default().ID)
+	}
+	if _, ok := For("d2r"); ok {
+		t.Error("暗黑2R 已从工具中移除，不应再注册适配器")
 	}
 	for _, g := range All() {
 		a, ok := For(g.ID)

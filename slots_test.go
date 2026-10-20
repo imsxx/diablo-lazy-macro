@@ -26,7 +26,7 @@ func TestDefaultConfigHasSingleProfile(t *testing.T) {
 }
 
 // 界面「+」新增的空白方案（槽位全部禁用）必须能过协议校验：
-// 协议要求每方案至少 1 条规则，落盘时由 slotsToProfile 兜底一条占位规则。
+// 协议 v4 起空方案合法，落盘时不再兜底任何占位规则（否则玩家没配技能就会乱按键）。
 func TestAddedBlankProfileResolves(t *testing.T) {
 	blank := defaultSlots()
 	for i, s := range blank {
@@ -35,8 +35,8 @@ func TestAddedBlankProfileResolves(t *testing.T) {
 		}
 	}
 	added := slotsToProfile(blank, "配置 2", "", config.ModeConcurrent)
-	if len(added.Rules) != 1 {
-		t.Fatalf("空白方案应只含 1 条占位规则，实际 %d", len(added.Rules))
+	if len(added.Rules) != 0 {
+		t.Fatalf("空白方案不应含任何规则，实际 %d 条", len(added.Rules))
 	}
 	first := slotsToProfile(defaultSlots(), "配置 1", "", config.ModeConcurrent)
 	if _, err := config.Resolve(config.Raw{

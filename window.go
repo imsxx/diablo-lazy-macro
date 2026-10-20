@@ -1303,10 +1303,7 @@ func slotsToProfile(slots [numSlots]skillSlotData, name string, switchKey string
 		}
 	}
 
-	if len(rules) == 0 {
-		rules = append(rules, config.RawRule{Trigger: "t", Action: "tap:1", IntervalMS: 250})
-	}
-
+	// 槽位全部禁用时就是空方案（协议 v4 起合法）：玩家还没填技能，不该顺手替他按一个键。
 	return config.RawProfile{
 		Name:  name,
 		HK:    switchKey,
