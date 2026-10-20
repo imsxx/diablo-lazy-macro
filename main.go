@@ -303,16 +303,6 @@ func (a *app) loadGame(gameID string) error {
 	}
 	if snap != nil {
 		raw := snap.Config
-		// 旧版本存档就地升级：回填释放策略并提升版本号，保证「保持Buff」的屏幕守卫不丢失。
-		config.UpgradeLegacy(&raw)
-		// 方案数量以存档为准（协议保证 1–4）。为空只补一个占位方案，
-		// 不再一律补到 4 个：默认只给玩家一个配置，需要多个时在界面 tab 尾部点「+」。
-		if len(raw.Profiles) == 0 {
-			raw.Profiles = append(raw.Profiles, config.RawProfile{
-				Name:  "配置 1",
-				Rules: []config.RawRule{{Trigger: "t", Action: "tap:1", IntervalMS: 250}},
-			})
-		}
 		parsed, err := config.Resolve(raw)
 		if err != nil {
 			return err

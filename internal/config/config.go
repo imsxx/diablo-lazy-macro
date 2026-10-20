@@ -1,6 +1,6 @@
 // Package config 实现分享码协议 v6 的解析、编码与校验（契约文档：docs/share-code.md）。
 // 解析必须 Fail Fast：任何不合法输入整段拒绝，禁止部分应用或静默降级。
-// 向后兼容：仍可解析 v1–v5 分享码（旧码导入后按当前版本重新导出）。
+// 开发阶段只认当前版本：旧版本分享码直接拒绝（AGENTS 第六节）。
 package config
 
 import (
@@ -21,8 +21,6 @@ const (
 	Prefix = "DLM6:"
 	// Version 是当前协议版本。
 	Version = 6
-	// MinVersion 是仍可解析的最旧协议版本（旧分享码与旧存档可继续使用）。
-	MinVersion = 1
 
 	maxCodeChars       = 4096
 	maxDecodedBytes    = 3000
@@ -82,10 +80,7 @@ type Raw struct {
 
 // RawProfile 是一套可切换的规则集合的 JSON 形态。
 type RawProfile struct {
-	Name string `json:"n,omitempty"`
-	// HK 是 v1–v5 的方案切换键，v6 起回收：切换配置请回工具界面进行。
-	// 字段保留只为让旧码仍可解析（解析时忽略）。
-	HK    string    `json:"hk,omitempty"`
+	Name  string    `json:"n,omitempty"`
 	Mode  string    `json:"m,omitempty"` // 触发模式：seq 循环 / con 并发（缺省即并发）
 	Rules []RawRule `json:"r"`
 }
@@ -101,9 +96,6 @@ type RawRule struct {
 	// DelayMinMS 是延迟区间的下界（毫秒，非负）：缺省（0）表示与 |d| 相同，即固定延迟。
 	// 与 d 一起表达「每次在 [DelayMinMS, |d|] 之间随机取一个幅度」。
 	DelayMinMS int `json:"dn,omitempty"`
-	// RandomDelay 是 v1–v4 的「延迟随机」开关，v5 起由 d + dn 取代。
-	// 仍保留字段用于解析旧码（rd=true 等价于 dn=10，保持旧行为）。
-	RandomDelay bool `json:"rd,omitempty"`
 }
 
 // Parsed 是校验并解析后的可执行形式。
@@ -215,7 +207,7 @@ func decode(code string) (*Raw, error) {
 }
 
 // splitPrefix 解析 "DLM<n>:" 前缀，返回正文与其声明的版本号。
-// 支持解析 v1 旧码；版本超出支持范围时拒绝并提示升级。
+// 开发阶段只接受当前版本：旧码没有兼容义务，直接拒绝并提示重新导出。
 func splitPrefix(code string) (payload string, version int, err error) {
 	idx := strings.IndexByte(code, ':')
 	if idx < 0 {
@@ -226,8 +218,8 @@ func splitPrefix(code string) (payload string, version int, err error) {
 		return "", 0, fmt.Errorf("分享码必须以 %s 开头", Prefix)
 	}
 	version = int(tag[3] - '0')
-	if version < MinVersion || version > Version {
-		return "", 0, fmt.Errorf("分享码协议版本为 %d，本工具支持 %d–%d（请升级工具）", version, MinVersion, Version)
+	if version != Version {
+		return "", 0, fmt.Errorf("分享码协议版本为 %d，本工具只支持 %d（请用新版工具重新导出）", version, Version)
 	}
 	return code[idx+1:], version, nil
 }
@@ -243,8 +235,8 @@ func stripSpace(s string) string {
 }
 
 func resolve(raw *Raw) (*Parsed, error) {
-	if raw.Version < MinVersion || raw.Version > Version {
-		return nil, fmt.Errorf("分享码版本为 %d，本工具支持 %d–%d（请升级工具）", raw.Version, MinVersion, Version)
+	if raw.Version != Version {
+		return nil, fmt.Errorf("分享码版本为 %d，本工具只支持 %d（请用新版工具重新导出）", raw.Version, Version)
 	}
 	if raw.Game != "" {
 		if _, ok := games.Lookup(raw.Game); !ok {
@@ -284,11 +276,9 @@ func resolve(raw *Raw) (*Parsed, error) {
 		if err != nil {
 			return nil, err
 		}
-		// v1–v5 的 hk（方案切换键）已回收：旧码里的 hk 解析时直接忽略，
-		// 免得玩家以为「按一下就切方案」还在生效。
 		pp := ParsedProfile{Name: rp.Name, Mode: mode}
 		for ri, rr := range rp.Rules {
-			rule, err := resolveRule(pi+1, ri+1, raw.Version, rr)
+			rule, err := resolveRule(pi+1, ri+1, rr)
 			if err != nil {
 				return nil, err
 			}
@@ -299,7 +289,7 @@ func resolve(raw *Raw) (*Parsed, error) {
 	return parsed, nil
 }
 
-func resolveRule(profileNo, ruleNo, version int, r RawRule) (*ParsedRule, error) {
+func resolveRule(profileNo, ruleNo int, r RawRule) (*ParsedRule, error) {
 	where := fmt.Sprintf("方案 #%d 规则 #%d", profileNo, ruleNo)
 	rule := &ParsedRule{IntervalMS: r.IntervalMS}
 
@@ -368,66 +358,17 @@ func resolveRule(profileNo, ruleNo, version int, r RawRule) (*ParsedRule, error)
 		}
 	}
 
-	if err := resolveRuleTuning(where, version, r, rule); err != nil {
+	if err := resolveRuleTuning(where, r, rule); err != nil {
 		return nil, err
 	}
 	return rule, nil
 }
 
-// InferStrategy 按动作类型与间隔推断释放策略。
-// 仅用于 v1 旧数据迁移（v1 没有策略字段）：tap + 300ms 是历史约定中的「保持Buff」。
-// 序列与单点没有对应的界面策略，返回未声明，避免改写其原有语义。
-func InferStrategy(kind ActionKind, intervalMS int) int {
-	switch kind {
-	case ActionHold:
-		return StrategyHold
-	case ActionTap:
-		if intervalMS == 300 {
-			return StrategyBuff
-		}
-		return StrategySpam
-	default:
-		return StrategyDisabled
-	}
-}
-
-// UpgradeLegacy 把旧版原始配置就地升级到当前协议版本：
-// 回填缺失的释放策略（v1 缺少该字段），并把版本号提升为当前版本。
-// 已声明策略的规则不会被改写（幂等）；当前版本的配置直接返回。
-func UpgradeLegacy(r *Raw) {
-	if r == nil || r.Version >= Version {
-		return
-	}
-	for pi := range r.Profiles {
-		if r.Profiles[pi].Mode == "" {
-			r.Profiles[pi].Mode = ModeConcurrent
-		}
-		for ri := range r.Profiles[pi].Rules {
-			rule := &r.Profiles[pi].Rules[ri]
-			// v4 及更早用 rd 表达随机：折算成显式区间，否则升级到 v5 后会被当作已回收字段拒绝。
-			if rule.RandomDelay {
-				rule.DelayMinMS = legacyRandomDelayFloorMS
-				rule.RandomDelay = false
-			}
-			if rule.Strategy != StrategyDisabled {
-				continue
-			}
-			kind, _, _ := strings.Cut(rule.Action, ":")
-			rule.Strategy = InferStrategy(ActionKind(strings.ToLower(strings.TrimSpace(kind))), rule.IntervalMS)
-		}
-	}
-	r.Version = Version
-}
-
-// legacyRandomDelayFloorMS 是 v1–v4「延迟随机」的实际下限（对齐 D3keyHelper 的 Random(10, 延迟)）。
-// 仅用于把旧码折算成区间；v5 起区间完全由玩家给定，不再有内置下限。
-const legacyRandomDelayFloorMS = 10
-
 // resolveRuleTuning 校验并写入调参字段（延迟区间与释放策略）。
 // 刻意不提供「重复次数」「优先级」这类配置：宏本身按轮循环触发，玩家无需理解它们。
-func resolveRuleTuning(where string, version int, r RawRule, rule *ParsedRule) error {
+func resolveRuleTuning(where string, r RawRule, rule *ParsedRule) error {
 	// 延迟（d / dn）：只对连点有意义——序列尚无偏移语义，静默忽略会误导使用者。
-	if r.DelayMS != 0 || r.DelayMinMS != 0 || r.RandomDelay {
+	if r.DelayMS != 0 || r.DelayMinMS != 0 {
 		if rule.Kind != ActionTap {
 			return fmt.Errorf("%s 的动作 %s 不接受延迟字段（d/dn）", where, rule.Kind)
 		}
@@ -438,35 +379,20 @@ func resolveRuleTuning(where string, version int, r RawRule, rule *ParsedRule) e
 	if r.DelayMinMS < 0 || r.DelayMinMS > maxDelayMS {
 		return fmt.Errorf("%s 的最小延迟必须在 0–%d 毫秒之间，实际 %d", where, maxDelayMS, r.DelayMinMS)
 	}
-	if r.RandomDelay {
-		if version >= 5 {
-			return fmt.Errorf("%s 使用了已回收字段 rd：v5 起延迟随机改由 d + dn 表达", where)
-		}
+	if r.DelayMinMS != 0 {
 		if r.DelayMS == 0 {
-			return fmt.Errorf("%s 勾选了延迟随机但没有设置延迟", where)
+			return fmt.Errorf("%s 设置了最小延迟（dn）却没有最大延迟（d）", where)
 		}
-		if r.DelayMinMS != 0 {
-			return fmt.Errorf("%s 同时给出 rd 与 dn，无法判断以哪个为准", where)
+		hi := r.DelayMS
+		if hi < 0 {
+			hi = -hi
 		}
-		// 旧码的「随机」等价于 [10ms, |d|]，折算成显式区间。
-		rule.DelayMS = r.DelayMS
-		rule.DelayMinMS = legacyRandomDelayFloorMS
-	} else {
-		if r.DelayMinMS != 0 {
-			if r.DelayMS == 0 {
-				return fmt.Errorf("%s 设置了最小延迟（dn）却没有最大延迟（d）", where)
-			}
-			hi := r.DelayMS
-			if hi < 0 {
-				hi = -hi
-			}
-			if r.DelayMinMS > hi {
-				return fmt.Errorf("%s 的最小延迟（%dms）不能大于最大延迟（%dms）", where, r.DelayMinMS, hi)
-			}
+		if r.DelayMinMS > hi {
+			return fmt.Errorf("%s 的最小延迟（%dms）不能大于最大延迟（%dms）", where, r.DelayMinMS, hi)
 		}
-		rule.DelayMS = r.DelayMS
-		rule.DelayMinMS = r.DelayMinMS
 	}
+	rule.DelayMS = r.DelayMS
+	rule.DelayMinMS = r.DelayMinMS
 
 	// 策略（st，可选）：显式声明时必须与动作类型相容。
 	if r.Strategy < 0 || r.Strategy > StrategyBuff {

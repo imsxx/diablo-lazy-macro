@@ -247,8 +247,8 @@ func TestClampDelayMin(t *testing.T) {
 	}
 }
 
-func TestSlotStrategyInferredFromLegacyConfig(t *testing.T) {
-	// v1 旧码不含策略字段：按动作类型与间隔推断（tap + 300ms 视为保持Buff）。
+func TestSlotStrategyInferredWhenUnset(t *testing.T) {
+	// 协议允许省略 st：加载时按动作类型与间隔推断（tap + 300ms 视为保持Buff）。
 	prof := config.RawProfile{Rules: []config.RawRule{
 		{Trigger: "t", Action: "hold:RMB"},
 		{Trigger: "t", Action: "tap:2", IntervalMS: 300},

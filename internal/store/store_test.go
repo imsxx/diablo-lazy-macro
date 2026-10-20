@@ -11,7 +11,7 @@ import (
 func sampleSnapshot() Snapshot {
 	return Snapshot{
 		Config: config.Raw{
-			Version: 1,
+			Version: config.Version,
 			Name:    "测试配置",
 			Toggle:  "F1",
 			Profiles: []config.RawProfile{
@@ -130,7 +130,7 @@ func TestLoadCorruptThenQuarantine(t *testing.T) {
 }
 
 func TestSaveRejectsInvalid(t *testing.T) {
-	bad := Snapshot{Config: config.Raw{Version: 1, Profiles: []config.RawProfile{
+	bad := Snapshot{Config: config.Raw{Version: config.Version, Profiles: []config.RawProfile{
 		{Rules: []config.RawRule{{Trigger: "t", Action: "tap:1", IntervalMS: 0}}},
 	}}}
 	if err := Save(t.TempDir(), ConfigFile("d4"), bad); err == nil {
@@ -184,36 +184,16 @@ func TestSettingsDefaultAndRoundTrip(t *testing.T) {
 	}
 }
 
-// 暗黑2R 已从工具中移除：老存档里指向它的当前游戏、进程覆盖与按键映射都要被迁移掉，
-// 否则升级后整份设置会因「未知游戏」被拒绝加载，玩家直接启动失败。
-func TestLoadSettingsMigratesRemovedGame(t *testing.T) {
+// 不做「未知游戏静默回落」兜底：非法设置应当被拒绝，而不是被悄悄改写。
+func TestUnknownGameIsRejected(t *testing.T) {
 	dir := t.TempDir()
-	content := `{"current_game":"d2r","processes":{"d2r":"D2R.exe","d3":"Diablo III.exe"},` +
-		`"game_keys":{"d2r":{"force_stand_enabled":true},"d3":{"force_stand_key":"SHIFT"}}}`
+	content := `{"current_game":"d9"}`
 	if err := os.WriteFile(Path(dir, SettingsFile), []byte(content), 0o644); err != nil {
 		t.Fatalf("准备文件失败：%v", err)
 	}
-	out, err := LoadSettings(dir)
-	if err != nil {
-		t.Fatalf("已下架游戏的设置应当被迁移而不是拒绝：%v", err)
+	if _, err := LoadSettings(dir); err == nil {
+		t.Fatal("未知当前游戏应当被拒绝")
 	}
-	if out.CurrentGame != "d4" {
-		t.Errorf("当前游戏应回落到默认 d4，实际 %q", out.CurrentGame)
-	}
-	if _, ok := out.Processes["d2r"]; ok {
-		t.Error("进程覆盖里不应残留已下架游戏")
-	}
-	if _, ok := out.GameKeys["d2r"]; ok {
-		t.Error("按键映射里不应残留已下架游戏")
-	}
-	// 未下架游戏的配置必须原样保留。
-	if out.Processes["d3"] != "Diablo III.exe" || out.GameKeys["d3"].ForceStandKey != "SHIFT" {
-		t.Errorf("现有游戏的设置被误删：%+v / %+v", out.Processes, out.GameKeys)
-	}
-}
-
-// 写盘仍是 Fail Fast：未知游戏不允许被保存（迁移只发生在加载阶段）。
-func TestSaveSettingsRejectsUnknownGame(t *testing.T) {
 	if err := SaveSettings(t.TempDir(), Settings{CurrentGame: "d9"}); err == nil {
 		t.Fatalf("非法设置应当拒绝保存")
 	}

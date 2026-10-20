@@ -183,21 +183,11 @@ func DefaultSettings() *Settings {
 // applyDefaults 补齐缺失字段（旧存档升级用）：JSON 里没有的字段是零值，
 // 直接校验会失败，因此加载后先按默认值填平。
 func (s *Settings) applyDefaults() {
-	// 首次启动（空值）与「当前游戏已从工具中移除」（如暗黑2R）都回落到默认游戏（暗黑4）。
-	if _, ok := games.Lookup(s.CurrentGame); !ok {
+	// 首次启动时 current_game 是空值，回落到默认游戏（暗黑4）。
+	// 不做「未知游戏 → 静默换成默认」之类的兜底：非法值应当被 Validate 拒绝，
+	// 由上层按存档损坏处理（AGENTS 第六节）。
+	if s.CurrentGame == "" {
 		s.CurrentGame = games.Default().ID
-	}
-	// 顺带清理属于已下架游戏的进程覆盖与按键映射，否则整份设置会因「未知游戏」被拒绝加载，
-	// 玩家升级后直接启动失败。
-	for id := range s.Processes {
-		if _, ok := games.Lookup(id); !ok {
-			delete(s.Processes, id)
-		}
-	}
-	for id := range s.GameKeys {
-		if _, ok := games.Lookup(id); !ok {
-			delete(s.GameKeys, id)
-		}
 	}
 	h := DefaultHelpers()
 	if s.Helpers.Hotkey == "" {
