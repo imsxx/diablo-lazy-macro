@@ -112,6 +112,15 @@ func TestFrontendInterfaceContract(t *testing.T) {
 		t.Error("web/app.js 又出现了 setTextIfIdle：展示型元素（键帽按钮）必须直接写 textContent")
 	}
 
+	// 3.5) 方案标签必须按后端下发的数量动态渲染：硬编码的 4 个按钮在「默认只有 1 个配置」时
+	//      会露出 3 个空标签，点进去还会撞上后端越界校验。
+	if !strings.Contains(indexHTML, `id="profileTabs"`) {
+		t.Error("web/index.html 缺少方案标签容器 id=profileTabs")
+	}
+	if regexp.MustCompile(`class="tab-btn[^"]*"\s+data-tab=`).MatchString(indexHTML) {
+		t.Error("web/index.html 又硬编码了方案标签：标签应由 renderTabs 按 profileNames 渲染")
+	}
+
 	// 4) 前端取用的元素 id 必须在 HTML 里存在
 	for _, m := range regexp.MustCompile(`\$id\('([A-Za-z0-9_]+)'\)`).FindAllStringSubmatch(appJS, -1) {
 		if !strings.Contains(indexHTML, `id="`+m[1]+`"`) {

@@ -12,6 +12,8 @@ let profilesDigest = '';
 let noticeTimer = null;
 
 const STRATEGY_NAMES = ['禁用', '按住不放', '连点', '保持Buff'];
+// MAX_PROFILES 与协议上限（internal/config 的 1–4 个方案）一致：前端只用它决定「+」是否可点。
+const MAX_PROFILES = 4;
 
 // ---------------------------------------------------------------- 基础设施
 
@@ -93,6 +95,7 @@ onReady(() => {
   bindHeaderDrag();
   window.addEventListener('keydown', handleKeyDown, true);
   bindSlotsDelegation();
+  bindProfileTabs();
   bindHelperChecklist();
   bindOverlayDismiss();
   bootstrap();
@@ -138,7 +141,9 @@ async function reloadState() {
 function applyState(next) {
   const prev = state;
   state = next;
-  currentTab = next.currentProfileIdx || 0;
+  // 方案数量是动态的（默认 1 个，可加到 4 个）：当前标签必须夹在有效范围内。
+  const names = next.profileNames || [];
+  currentTab = Math.min(Math.max(next.currentProfileIdx || 0, 0), Math.max(names.length - 1, 0));
 
   const gameChanged = !prev || prev.currentGame !== next.currentGame;
   const profileChanged = !prev || prev.currentProfileIdx !== next.currentProfileIdx;
@@ -218,13 +223,27 @@ function renderHeaderKeys() {
   }
 }
 
+// renderTabs 按后端下发的方案数量渲染标签，标签文字永远取玩家自己起的配置名；
+// 末尾固定一个「+」用来新增配置（达到协议上限后置灰）。签名没变就不重建 DOM。
 function renderTabs() {
   if (!state) return;
-  document.querySelectorAll('.tab-btn').forEach((btn, idx) => {
-    btn.classList.toggle('active', idx === currentTab);
-    btn.textContent = state.profileNames[idx] || '配置 ' + (idx + 1);
-    btn.title = '切换到该方案';
+  const container = $id('profileTabs');
+  if (!container) return;
+  const names = state.profileNames || [];
+  const canAdd = names.length < MAX_PROFILES;
+  const sig = JSON.stringify([names, currentTab, canAdd]);
+  if (container.dataset.sig === sig) return;
+  container.dataset.sig = sig;
+
+  const parts = names.map((name, idx) => {
+    const label = name || '配置 ' + (idx + 1);
+    return '<button class="tab-btn' + (idx === currentTab ? ' active' : '') + '" data-tab="' + idx +
+      '" title="切换到「' + esc(label) + '」">' + esc(label) + '</button>';
   });
+  const addTitle = canAdd ? '新增一个配置（最多 ' + MAX_PROFILES + ' 个）' : '最多 ' + MAX_PROFILES + ' 个配置';
+  parts.push('<button class="tab-btn tab-add" data-action="add"' +
+    (canAdd ? '' : ' disabled') + ' title="' + addTitle + '">+</button>');
+  container.innerHTML = parts.join('');
 }
 
 function renderSlots() {
@@ -418,6 +437,32 @@ async function switchTab(idx) {
   const r = await callApi('api_switchProfile', idx);
   if (!r.ok) return;
   await reloadState();
+}
+
+// addProfile 让 Go 追加一个空白方案并切过去：名称、槽位、标签都由后端回传的状态决定，
+// 界面不做本地猜测（失败时提示条已有 Go 给出的原因，例如「最多 4 个配置」）。
+async function addProfile() {
+  const r = await callApi('api_addProfile');
+  if (!r.ok) return;
+  await reloadState();
+  flashAutoSave();
+  showNotice('已新增配置：改个名字并填好技能，方便在游戏里切换', 'ok');
+}
+
+// 标签是动态重建的，事件统一交给容器（委托），避免每次重建都要重新绑。
+function bindProfileTabs() {
+  const container = $id('profileTabs');
+  if (!container) return;
+  container.addEventListener('click', (e) => {
+    const btn = e.target.closest('.tab-btn');
+    if (!btn || btn.disabled) return;
+    if (btn.dataset.action === 'add') {
+      addProfile();
+      return;
+    }
+    const idx = Number(btn.dataset.tab);
+    if (Number.isInteger(idx)) switchTab(idx);
+  });
 }
 
 function bindSlotsDelegation() {

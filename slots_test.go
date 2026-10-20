@@ -10,17 +10,40 @@ import (
 	"github.com/imsxx/diablo-lazy-macro/internal/store"
 )
 
-func TestDefaultConfigHasFourProfiles(t *testing.T) {
+// 新游戏只给 1 个方案：一上来摆 4 个空配置只会让玩家多按几次标签页。
+func TestDefaultConfigHasSingleProfile(t *testing.T) {
 	cfg := defaultConfig()
-	if len(cfg.Profiles) != 4 {
-		t.Fatalf("预期 4 个默认方案，实际 %d", len(cfg.Profiles))
+	if len(cfg.Profiles) != 1 {
+		t.Fatalf("预期 1 个默认方案，实际 %d", len(cfg.Profiles))
 	}
 	parsed, err := config.Resolve(cfg)
 	if err != nil {
 		t.Fatalf("默认配置校验失败：%v", err)
 	}
-	if len(parsed.Profiles) != 4 {
-		t.Fatalf("解析后方案数量不为 4：%d", len(parsed.Profiles))
+	if len(parsed.Profiles) != 1 {
+		t.Fatalf("解析后方案数量不为 1：%d", len(parsed.Profiles))
+	}
+}
+
+// 界面「+」新增的空白方案（槽位全部禁用）必须能过协议校验：
+// 协议要求每方案至少 1 条规则，落盘时由 slotsToProfile 兜底一条占位规则。
+func TestAddedBlankProfileResolves(t *testing.T) {
+	blank := defaultSlots()
+	for i, s := range blank {
+		if s.Strategy != strategyDisabled {
+			t.Fatalf("新增方案的槽位 %d 应是禁用状态，实际策略 %d", i+1, s.Strategy)
+		}
+	}
+	added := slotsToProfile(blank, "配置 2", "", config.ModeConcurrent)
+	if len(added.Rules) != 1 {
+		t.Fatalf("空白方案应只含 1 条占位规则，实际 %d", len(added.Rules))
+	}
+	first := slotsToProfile(defaultSlots(), "配置 1", "", config.ModeConcurrent)
+	if _, err := config.Resolve(config.Raw{
+		Version:  config.Version,
+		Profiles: []config.RawProfile{first, added},
+	}); err != nil {
+		t.Fatalf("新增空白方案后应能通过协议校验：%v", err)
 	}
 }
 

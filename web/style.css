@@ -283,6 +283,26 @@ body {
   background: #20232c;
 }
 
+/* 末尾的「+」：新增配置；达到协议上限（4 个）时置灰 */
+.tab-btn.tab-add {
+  padding: 7px 14px;
+  font-size: 14px;
+  line-height: 1;
+  font-weight: bold;
+  border-style: dashed;
+  color: var(--color-text-sub);
+}
+
+.tab-btn.tab-add:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.tab-btn.tab-add:disabled:hover {
+  color: var(--color-text-sub);
+  background: #14161c;
+}
+
 .tab-btn.active {
   background: var(--bg-card);
   border-color: var(--border-main);

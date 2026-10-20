@@ -316,10 +316,11 @@ func (a *app) loadGame(gameID string) error {
 		raw := snap.Config
 		// 旧版本存档就地升级：回填释放策略并提升版本号，保证「保持Buff」的屏幕守卫不丢失。
 		config.UpgradeLegacy(&raw)
-		for len(raw.Profiles) < 4 {
-			idx := len(raw.Profiles)
+		// 方案数量以存档为准（协议保证 1–4）。为空只补一个占位方案，
+		// 不再一律补到 4 个：默认只给玩家一个配置，需要多个时在界面 tab 尾部点「+」。
+		if len(raw.Profiles) == 0 {
 			raw.Profiles = append(raw.Profiles, config.RawProfile{
-				Name:  fmt.Sprintf("配置 %d", idx+1),
+				Name:  "配置 1",
 				Rules: []config.RawRule{{Trigger: "t", Action: "tap:1", IntervalMS: 250}},
 			})
 		}
@@ -637,15 +638,9 @@ func (a *app) previewImportFromClipboard() (config.Raw, *config.Parsed, string, 
 	return *raw, parsed, sb.String(), nil
 }
 
-// applyImport 应用一份已确认的导入配置：补齐 4 套方案、校验、按「启用」重建引擎。
+// applyImport 应用一份已确认的导入配置：按分享码自带的方案数量校验、按「启用」重建引擎。
+// 不再补齐到 4 套——码里有几个方案就导入几个（协议保证 1–4），需要更多由玩家在界面上加。
 func (a *app) applyImport(raw config.Raw, parsed *config.Parsed) error {
-	for len(raw.Profiles) < maxProfiles {
-		idx := len(raw.Profiles)
-		raw.Profiles = append(raw.Profiles, config.RawProfile{
-			Name:  fmt.Sprintf("配置 %d", idx+1),
-			Rules: []config.RawRule{{Trigger: "t", Action: "tap:1", IntervalMS: 250}},
-		})
-	}
 	resolved, err := config.Resolve(raw)
 	if err != nil {
 		return fmt.Errorf("配置校验失败：%v", err)
@@ -1420,16 +1415,15 @@ func onOffText(on bool) string {
 }
 
 // defaultConfig 是新建配置的起手模板：固定 4 个方案，开箱即用。
+// defaultConfig 是新游戏的起始配置：只有一个方案，其余方案由玩家在界面 tab 尾部点「+」新增。
+// 刻意不做「内置方案预设」：每套 BD 用哪些技能、技能放在哪个键位都不确定，
+// 预设只会逼玩家先删掉一堆用不上的配置。
 func defaultConfig() config.Raw {
-	profs := make([]config.RawProfile, maxProfiles)
-	for i := 0; i < maxProfiles; i++ {
-		profs[i] = config.RawProfile{
-			Name:  fmt.Sprintf("配置 %d", i+1),
-			Rules: []config.RawRule{{Trigger: "t", Action: "tap:1", IntervalMS: 250}},
-		}
-	}
 	return config.Raw{
-		Version:  config.Version,
-		Profiles: profs,
+		Version: config.Version,
+		Profiles: []config.RawProfile{{
+			Name:  "配置 1",
+			Rules: []config.RawRule{{Trigger: "t", Action: "tap:1", IntervalMS: 250}},
+		}},
 	}
 }

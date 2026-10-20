@@ -49,6 +49,8 @@ var (
 )
 
 const (
+	// maxProfiles 是方案容量上限（协议允许 1–4 个）。默认只给玩家 1 个方案，
+	// 其余由界面上的「+」按需新增——一上来摆 4 个空方案只会让玩家多按几次 Tab。
 	maxProfiles = 4
 	numSlots    = 6
 
@@ -235,10 +237,13 @@ type mainWindow struct {
 	wv   webview2.WebView
 	hwnd uintptr
 
+	// 数组按容量（maxProfiles）分配，profileCount 才是「玩家当前有几个方案」。
+	// 界面只下发与提交前 profileCount 个，其余的数组槽位不可见、也不写进存档。
 	profileSlots [maxProfiles][numSlots]skillSlotData
 	profileNames [maxProfiles]string
 	profileHKs   [maxProfiles]string
 	profileModes [maxProfiles]string
+	profileCount int
 	startMode    int
 
 	profileIdx int
@@ -535,7 +540,7 @@ func (w *mainWindow) initBindings() {
 	})
 
 	bind("api_switchProfile", func(idx int) error {
-		if idx < 0 || idx >= maxProfiles {
+		if idx < 0 || idx >= w.profileCount {
 			return fmt.Errorf("方案序号 %d 超出范围", idx)
 		}
 		w.profileIdx = idx
@@ -545,7 +550,7 @@ func (w *mainWindow) initBindings() {
 	})
 
 	bind("api_updateSlot", func(tabIdx, slotIdx int, key string, strategy, interval, delay int, random bool) error {
-		if tabIdx < 0 || tabIdx >= maxProfiles || slotIdx < 0 || slotIdx >= numSlots {
+		if tabIdx < 0 || tabIdx >= w.profileCount || slotIdx < 0 || slotIdx >= numSlots {
 			return fmt.Errorf("槽位序号超出范围")
 		}
 		if strategy < strategyDisabled || strategy > strategyBuff {
@@ -569,7 +574,7 @@ func (w *mainWindow) initBindings() {
 	})
 
 	bind("api_updateProfileMeta", func(tabIdx int, name, hk, mode string) error {
-		if tabIdx < 0 || tabIdx >= maxProfiles {
+		if tabIdx < 0 || tabIdx >= w.profileCount {
 			return fmt.Errorf("方案序号 %d 超出范围", tabIdx)
 		}
 		name = strings.TrimSpace(name)
@@ -603,6 +608,37 @@ func (w *mainWindow) initBindings() {
 			w.profileHKs[tabIdx] = prevHK
 			w.profileModes[tabIdx] = prevMode
 		})
+	})
+
+	// api_addProfile 在方案列表末尾追加一个空白方案并切过去，返回新方案序号。
+	// 空白方案沿用默认键位但全部「禁用」，由玩家自己选策略；协议要求每方案至少 1 条规则，
+	// 落盘时由 slotsToProfile 兜底一条占位规则。
+	bind("api_addProfile", func() (int, error) {
+		if w.profileCount >= maxProfiles {
+			return 0, fmt.Errorf("最多 %d 个配置（协议上限），请先删掉不用的再新增", maxProfiles)
+		}
+		idx := w.profileCount
+		prevCount, prevIdx := w.profileCount, w.profileIdx
+		prevSlots := w.profileSlots[idx]
+		prevName, prevHK, prevMode := w.profileNames[idx], w.profileHKs[idx], w.profileModes[idx]
+
+		w.profileSlots[idx] = defaultSlots()
+		w.profileNames[idx] = fmt.Sprintf("配置 %d", idx+1)
+		w.profileHKs[idx] = ""
+		w.profileModes[idx] = config.ModeConcurrent
+		w.profileCount = idx + 1
+		w.profileIdx = idx
+
+		err := w.commitOrRollback(func() {
+			w.profileCount, w.profileIdx = prevCount, prevIdx
+			w.profileSlots[idx] = prevSlots
+			w.profileNames[idx], w.profileHKs[idx], w.profileModes[idx] = prevName, prevHK, prevMode
+		})
+		if err != nil {
+			return 0, err
+		}
+		w.app.log.Printf("[界面] 新增配置「%s」（共 %d 个）", w.profileNames[idx], w.profileCount)
+		return idx, nil
 	})
 
 	bind("api_updateToggle", func(token string) error {
@@ -834,8 +870,8 @@ func (w *mainWindow) buildFrontendState() *frontendState {
 		Version:           version,
 		CurrentGame:       w.app.settings.CurrentGame,
 		CurrentProfileIdx: w.profileIdx,
-		ProfileNames:      make([]string, maxProfiles),
-		Profiles:          make([]frontendProfile, maxProfiles),
+		ProfileNames:      make([]string, w.profileCount),
+		Profiles:          make([]frontendProfile, w.profileCount),
 		ToggleKey:         config.DefaultToggleKey,
 		StartMode:         w.startMode,
 		SmartPause:        w.app.settings.SmartPause,
@@ -848,7 +884,7 @@ func (w *mainWindow) buildFrontendState() *frontendState {
 	}
 	s.ToggleKeyLabel = keyNameOfToken(s.ToggleKey)
 
-	for t := 0; t < maxProfiles; t++ {
+	for t := 0; t < w.profileCount; t++ {
 		s.ProfileNames[t] = w.profileNames[t]
 		slots := make([]frontendSlot, numSlots)
 		for i := 0; i < numSlots; i++ {
@@ -975,29 +1011,33 @@ func (w *mainWindow) loadFromState() {
 
 	w.startMode = snap.StartMode
 
-	for i := 0; i < maxProfiles; i++ {
+	// 方案数量以存档为准（协议保证 1–4）：老存档里的 4 个方案原样保留，新存档只有 1 个。
+	w.profileCount = len(w.raw.Profiles)
+	if w.profileCount < 1 {
+		w.profileCount = 1
+	}
+	if w.profileCount > maxProfiles {
+		w.profileCount = maxProfiles
+	}
+	for i := 0; i < w.profileCount; i++ {
+		var p config.RawProfile
 		if i < len(w.raw.Profiles) {
-			p := w.raw.Profiles[i]
-			w.profileSlots[i] = profileToSlots(p)
-			w.profileNames[i] = p.Name
-			if w.profileNames[i] == "" {
-				w.profileNames[i] = fmt.Sprintf("配置 %d", i+1)
-			}
-			w.profileHKs[i] = p.HK
-			w.profileModes[i] = p.Mode
-		} else {
-			w.profileSlots[i] = defaultSlots()
-			w.profileNames[i] = fmt.Sprintf("配置 %d", i+1)
-			w.profileHKs[i] = ""
-			w.profileModes[i] = config.ModeConcurrent
+			p = w.raw.Profiles[i]
 		}
+		w.profileSlots[i] = profileToSlots(p)
+		w.profileNames[i] = p.Name
+		if w.profileNames[i] == "" {
+			w.profileNames[i] = fmt.Sprintf("配置 %d", i+1)
+		}
+		w.profileHKs[i] = p.HK
+		w.profileModes[i] = p.Mode
 	}
 
 	w.profileIdx = 0
 	if snap.Engine != nil {
 		w.profileIdx = snap.Engine.ProfileIndex()
 	}
-	if w.profileIdx < 0 || w.profileIdx >= maxProfiles {
+	if w.profileIdx < 0 || w.profileIdx >= w.profileCount {
 		w.profileIdx = 0
 	}
 
@@ -1007,6 +1047,13 @@ func (w *mainWindow) loadFromState() {
 func (w *mainWindow) refreshStatus() {
 	if w.wv == nil {
 		return
+	}
+	// 方案序号以引擎为准：托盘菜单与游戏内切换键都只改引擎、不经过界面。
+	// 这里对齐一次，避免界面停在旧方案、玩家接着编辑却写进另一个方案。
+	if snap := w.app.st.snapshot(); snap.Engine != nil {
+		if idx := snap.Engine.ProfileIndex(); idx >= 0 && idx < w.profileCount {
+			w.profileIdx = idx
+		}
 	}
 	st := w.buildFrontendState()
 	b, err := json.Marshal(st)
@@ -1024,11 +1071,15 @@ func (w *mainWindow) refreshStatus() {
 	})
 }
 
-// saveToState 把界面内存里的 4 套方案提交为配置：协议校验 → 重建引擎并继承运行态 → 落盘。
-// 校验不通过时返回错误（配置与磁盘都不改），由调用方回滚内存，见 commitOrRollback。
+// saveToState 把界面内存里的方案提交为配置：协议校验 → 重建引擎并继承运行态 → 落盘。
+// 只提交 profileCount 个方案（玩家实际拥有的），校验不通过时返回错误（配置与磁盘都不改），
+// 由调用方回滚内存，见 commitOrRollback。
 func (w *mainWindow) saveToState() error {
-	profs := make([]config.RawProfile, maxProfiles)
-	for i := 0; i < maxProfiles; i++ {
+	if w.profileCount < 1 {
+		w.profileCount = 1
+	}
+	profs := make([]config.RawProfile, w.profileCount)
+	for i := 0; i < w.profileCount; i++ {
 		name := w.profileNames[i]
 		if name == "" {
 			name = fmt.Sprintf("配置 %d", i+1)
@@ -1073,7 +1124,7 @@ func (w *mainWindow) commitOrRollback(restore func()) error {
 // slotVKs 返回界面槽位键的虚拟键码快照（无法解析的键记为 0），供 Buff 守卫在 tick 线程只读使用。
 func (w *mainWindow) slotVKs() [maxProfiles][numSlots]uint16 {
 	var out [maxProfiles][numSlots]uint16
-	for t := 0; t < maxProfiles; t++ {
+	for t := 0; t < w.profileCount && t < maxProfiles; t++ {
 		out[t] = slotVKsOf(w.profileSlots[t])
 	}
 	return out
@@ -1100,8 +1151,11 @@ func slotVKsFromRaw(raw config.Raw) [maxProfiles][numSlots]uint16 {
 
 // buildShareCode 生成当前配置的分享码；不写剪贴板、不弹窗，由调用方决定用途。
 func (w *mainWindow) buildShareCode() (string, error) {
-	profs := make([]config.RawProfile, maxProfiles)
-	for i := 0; i < maxProfiles; i++ {
+	if w.profileCount < 1 {
+		w.profileCount = 1
+	}
+	profs := make([]config.RawProfile, w.profileCount)
+	for i := 0; i < w.profileCount; i++ {
 		name := w.profileNames[i]
 		if name == "" {
 			name = fmt.Sprintf("配置 %d", i+1)

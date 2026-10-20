@@ -45,7 +45,7 @@ DLM3:eyJ2IjozLCJnIjoiZDMiLCJuIjoi5pqX6buRMyDpgJ_liLciLCJhIjoi5p-QQkTkvZzogIUiLCJ
 | `n` | 否 | 配置名，≤ 24 字符 |
 | `a` | 否 | 作者署名，≤ 24 字符 |
 | `tg` | 否 | 全局启停键，默认 `X1`（鼠标侧键 1）；键盘键与鼠标键均可，理由见上一节 |
-| `p` | 是 | 方案数组，1–4 个 |
+| `p` | 是 | 方案数组，1–4 个（工具里新建的配置默认只有 1 个，其余在标签尾部「+」按需添加；导入时码里有几个就是几个） |
 
 ### 方案 `p[]`
 

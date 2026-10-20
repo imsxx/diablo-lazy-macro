@@ -50,12 +50,8 @@
       <!-- 方案设置工作区 (Tab标签与配置卡片一体化连接) -->
       <div class="macro-section">
         <!-- 方案 Tab 导航 (紧密咬合下方卡片，无任何断开线) -->
-        <div class="profile-tabs">
-          <button class="tab-btn active" data-tab="0" onclick="switchTab(0)">配置 1</button>
-          <button class="tab-btn" data-tab="1" onclick="switchTab(1)">配置 2</button>
-          <button class="tab-btn" data-tab="2" onclick="switchTab(2)">配置 3</button>
-          <button class="tab-btn" data-tab="3" onclick="switchTab(3)">配置 4</button>
-        </div>
+        <!-- 标签与末尾的「+」都由 JS 按后端下发的方案数量渲染（默认只有 1 个，加号新增，上限 4） -->
+        <div class="profile-tabs" id="profileTabs"></div>
 
         <!-- 按键宏设置卡片 -->
         <div class="card macro-card">
