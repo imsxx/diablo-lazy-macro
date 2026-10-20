@@ -641,6 +641,45 @@ func (w *mainWindow) initBindings() {
 		return idx, nil
 	})
 
+	// api_deleteProfile 删除指定方案：后面的方案整体前移，末尾位置清空。
+	// 至少保留 1 个（协议要求），失败时把整张表恢复原样。
+	bind("api_deleteProfile", func(idx int) error {
+		if idx < 0 || idx >= w.profileCount {
+			return fmt.Errorf("方案序号 %d 超出范围", idx)
+		}
+		if w.profileCount <= 1 {
+			return fmt.Errorf("至少要保留 1 个配置")
+		}
+		prevSlots, prevNames := w.profileSlots, w.profileNames
+		prevHKs, prevModes := w.profileHKs, w.profileModes
+		prevCount, prevIdx := w.profileCount, w.profileIdx
+
+		for i := idx; i < w.profileCount-1; i++ {
+			w.profileSlots[i] = w.profileSlots[i+1]
+			w.profileNames[i] = w.profileNames[i+1]
+			w.profileHKs[i] = w.profileHKs[i+1]
+			w.profileModes[i] = w.profileModes[i+1]
+		}
+		last := w.profileCount - 1
+		w.profileSlots[last] = defaultSlots()
+		w.profileNames[last] = ""
+		w.profileHKs[last] = ""
+		w.profileModes[last] = ""
+		w.profileCount = last
+		w.profileIdx = activeAfterDelete(prevIdx, idx)
+
+		err := w.commitOrRollback(func() {
+			w.profileSlots, w.profileNames = prevSlots, prevNames
+			w.profileHKs, w.profileModes = prevHKs, prevModes
+			w.profileCount, w.profileIdx = prevCount, prevIdx
+		})
+		if err != nil {
+			return err
+		}
+		w.app.log.Printf("[界面] 已删除配置（剩余 %d 个）", w.profileCount)
+		return nil
+	})
+
 	bind("api_updateToggle", func(token string) error {
 		token = strings.ToUpper(strings.TrimSpace(token))
 		if token == "" {
@@ -1235,6 +1274,22 @@ func normalizeQuickPause(qp, prev store.QuickPauseSettings) store.QuickPauseSett
 		}
 	}
 	return qp
+}
+
+// activeAfterDelete 计算删除方案 idx 后应激活的序号：
+// 被删的方案在激活位之前 → 序号整体前移；删掉的正是激活位 → 落到前一个（删第一个则落在 0）。
+func activeAfterDelete(active, idx int) int {
+	switch {
+	case active > idx:
+		return active - 1
+	case active == idx:
+		if idx > 0 {
+			return idx - 1
+		}
+		return 0
+	default:
+		return active
+	}
 }
 
 func clampInterval(v, fallback int) int {

@@ -88,6 +88,8 @@
           <div class="form-item">
             <span class="form-label">配置名：</span>
             <input type="text" class="input-text sm" id="profileNameInput" onchange="saveProfileName()" maxlength="24" placeholder="配置 1">
+            <button class="tool-btn xs danger" id="deleteProfileBtn" onclick="deleteProfile()"
+              title="删除当前配置（需二次确认）">删除</button>
           </div>
           <div class="form-item">
             <span class="form-label">按键模式：</span>
@@ -270,6 +272,18 @@
   <!-- 按键录入浮层（内容由 JS 按捕获目标动态生成） -->
   <div class="capture-overlay" id="captureOverlay" style="display: none;">
     <div class="capture-box" id="captureBox"></div>
+  </div>
+
+  <!-- 通用二级确认浮层：删除配置等不可撤销操作 -->
+  <div class="capture-overlay" id="confirmOverlay" style="display: none;">
+    <div class="capture-box">
+      <div class="capture-title" id="confirmTitle">确认操作</div>
+      <div class="confirm-message" id="confirmMessage"></div>
+      <div class="capture-actions">
+        <button class="tool-btn" onclick="closeConfirm(false)">取消</button>
+        <button class="tool-btn danger" id="confirmOkBtn" onclick="closeConfirm(true)">确认</button>
+      </div>
+    </div>
   </div>
 
   <!-- 分享码导入预览浮层 -->

@@ -169,6 +169,26 @@ body {
   border-color: #404454;
 }
 
+/* 破坏性操作按钮（删除配置等）：红色描边，避免和普通按钮混在一起 */
+.tool-btn.danger {
+  border-color: #7f1d1d;
+  color: #f87171;
+}
+
+.tool-btn.danger:hover {
+  background: #7f1d1d;
+  border-color: #b91c1c;
+  color: #fff;
+}
+
+.tool-btn.danger:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  background: #1a1c23;
+  border-color: var(--border-main);
+  color: var(--color-text-sub);
+}
+
 .win-controls {
   display: flex;
   align-items: center;
@@ -785,6 +805,16 @@ body {
   gap: 8px;
   justify-content: center;
   margin-top: 14px;
+}
+
+/* 二级确认浮层的说明文字：把后果讲清楚，别让人靠猜 */
+.confirm-message {
+  margin-top: 8px;
+  max-width: 360px;
+  color: var(--color-text-sub);
+  font-size: 12px;
+  line-height: 1.7;
+  white-space: normal;
 }
 
 .import-preview {

@@ -7,6 +7,7 @@
 let state = null;
 let currentTab = 0;
 let capture = null; // { mode, target, options }
+let confirmResolve = null; // 二级确认浮层的等待者；非空表示浮层正开着
 let readySent = false;
 let profilesDigest = '';
 let noticeTimer = null;
@@ -309,6 +310,14 @@ function renderExtraSettings() {
     nameInput.value = prof.name || '配置 ' + (currentTab + 1);
   }
 
+  // 只剩 1 个配置时不允许删除（协议要求至少 1 个方案），按钮直接置灰并说明原因。
+  const delBtn = $id('deleteProfileBtn');
+  if (delBtn) {
+    const onlyOne = !state || !state.profileNames || state.profileNames.length <= 1;
+    delBtn.disabled = onlyOne;
+    delBtn.title = onlyOne ? '至少保留 1 个配置' : '删除当前配置（需二次确认）';
+  }
+
   const modeSelect = $id('profileModeSelect');
   if (modeSelect) {
     modeSelect.value = prof.mode || 'con';
@@ -534,6 +543,52 @@ async function saveProfileName() {
   flashAutoSave();
 }
 
+// askConfirm 是二级确认的唯一入口：返回 Promise<boolean>，浮层里的「取消/确认」和 Esc 都会结算它。
+function askConfirm(title, message, okLabel) {
+  const overlay = $id('confirmOverlay');
+  if (!overlay) return Promise.resolve(false);
+  if (confirmResolve) {
+    // 上一次确认还开着：先按「取消」结算，避免 Promise 永远悬着。
+    closeConfirm(false);
+  }
+  $id('confirmTitle').textContent = title || '确认操作';
+  $id('confirmMessage').textContent = message || '';
+  const okBtn = $id('confirmOkBtn');
+  if (okBtn) okBtn.textContent = okLabel || '确认';
+  overlay.style.display = 'flex';
+  return new Promise((resolve) => {
+    confirmResolve = resolve;
+  });
+}
+
+function closeConfirm(ok) {
+  const overlay = $id('confirmOverlay');
+  if (overlay) overlay.style.display = 'none';
+  const resolve = confirmResolve;
+  confirmResolve = null;
+  if (resolve) resolve(!!ok);
+}
+
+async function deleteProfile() {
+  const prof = currentProfile();
+  if (!prof || !state || !state.profileNames || state.profileNames.length <= 1) return;
+  const name = prof.name || '配置 ' + (currentTab + 1);
+  const ok = await askConfirm(
+    '删除配置「' + name + '」？',
+    '该配置的技能槽位、切换键与按键模式会一起删除，无法撤销。',
+    '确认删除'
+  );
+  if (!ok) return;
+  const r = await callApi('api_deleteProfile', currentTab);
+  if (!r.ok) {
+    await reloadState();
+    return;
+  }
+  await reloadState();
+  flashAutoSave();
+  showNotice('已删除配置「' + name + '」', 'ok');
+}
+
 async function saveProfileMode() {
   const prof = currentProfile();
   const sel = $id('profileModeSelect');
@@ -725,9 +780,23 @@ function bindOverlayDismiss() {
       if (e.target === importOverlay) closeImport();
     });
   }
+  const confirmOverlay = $id('confirmOverlay');
+  if (confirmOverlay) {
+    // 点背景等同「取消」：破坏性操作的默认结果必须是「不做事」。
+    confirmOverlay.addEventListener('mousedown', (e) => {
+      if (e.target === confirmOverlay) closeConfirm(false);
+    });
+  }
 }
 
 async function handleKeyDown(e) {
+  if (confirmResolve) {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      closeConfirm(false);
+    }
+    return;
+  }
   if (!capture) return;
   e.preventDefault();
   e.stopPropagation();

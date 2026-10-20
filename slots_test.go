@@ -25,6 +25,23 @@ func TestDefaultConfigHasSingleProfile(t *testing.T) {
 	}
 }
 
+// 删除方案后的激活位：既不能越界，也不能让玩家「删了当前配置却还停在原序号」。
+func TestActiveAfterDelete(t *testing.T) {
+	cases := []struct{ active, idx, want int }{
+		{0, 0, 0}, // 删第一个（也是当前）→ 仍是 0
+		{1, 0, 0}, // 删前面的 → 当前位前移
+		{2, 1, 1},
+		{1, 1, 0}, // 删当前 → 落到前一个
+		{0, 1, 0}, // 删后面的 → 当前位不动
+		{3, 2, 2},
+	}
+	for _, c := range cases {
+		if got := activeAfterDelete(c.active, c.idx); got != c.want {
+			t.Errorf("删除第 %d 个（当前第 %d 个）应激活 %d，实际 %d", c.idx, c.active, c.want, got)
+		}
+	}
+}
+
 // 界面「+」新增的空白方案（槽位全部禁用）必须能过协议校验：
 // 协议 v4 起空方案合法，落盘时不再兜底任何占位规则（否则玩家没配技能就会乱按键）。
 func TestAddedBlankProfileResolves(t *testing.T) {
