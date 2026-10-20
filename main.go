@@ -57,9 +57,8 @@ type runtimeSnapshot struct {
 	ToggleVK      uint16
 	GameID        string
 	TargetProcess string
-	StartMode     int // 0: 懒人模式 (开关切换), 1: 仅按下时 (按住生效)
-	QuickPause    store.QuickPauseSettings
-	SmartPause    bool
+	StartMode  int // 0: 懒人模式 (开关切换), 1: 仅按下时 (按住生效)
+	SmartPause bool
 	Helpers       store.HelperSettings
 	// SlotVKs 是每个方案 6 个槽位的虚拟键码（0 表示空），由 UI 线程在提交配置时写入。
 	// Buff 守卫在 tick 线程按它定位槽位：只读快照，不再读界面控件状态（避免数据竞争）。
@@ -96,10 +95,6 @@ type app struct {
 	hud *floatingHUD // 游戏悬浮状态窗（置顶 Mini HUD）
 
 	settings *store.Settings // 仅 UI 线程访问
-
-	// 快速暂停的轮询状态（仅 tick 线程访问）
-	qpDown    bool
-	qpLastTap time.Time
 
 	// 智能暂停的轮询状态（仅 tick 线程访问；spPrev 的长度与 smartPauseStopKeys 一致）
 	spTab  bool
@@ -298,7 +293,7 @@ func (a *app) loadGame(gameID string) error {
 	}
 	next := runtimeSnapshot{
 		GameID: gameID, TargetProcess: target,
-		QuickPause: a.settings.QuickPause, SmartPause: a.settings.SmartPause,
+		SmartPause: a.settings.SmartPause,
 		Helpers: a.settings.Helpers,
 	}
 
@@ -578,7 +573,6 @@ func (a *app) applyConfig(raw *config.Raw, parsed *config.Parsed, opts applyOpti
 		GameID:        gameID,
 		TargetProcess: target,
 		StartMode:     opts.StartMode,
-		QuickPause:    a.settings.QuickPause,
 		SmartPause:    a.settings.SmartPause,
 		Helpers:       a.settings.Helpers,
 		SlotVKs:       slotVKs,
@@ -688,8 +682,6 @@ func (a *app) startTicker() {
 						prevSwitch[i] = down
 					}
 				}
-				// 快速暂停：按鼠标键（单击 / 双击 / 压住）临时停手
-				a.tickQuickPause(snap)
 				// 智能暂停：聊天 / 开地图 / 回城时自动让路
 				a.tickSmartPause(snap)
 				// 助手功能（暗黑3）：按快捷键触发，运行中再按一次打断
@@ -744,7 +736,7 @@ func (a *app) tickSmartPause(snap runtimeSnapshot) {
 			eng.Resume()
 			a.log.Printf("[智能暂停] Tab → 恢复宏")
 		} else {
-			eng.QuickPause(now, 0, 0)
+			eng.QuickPause(now, 0)
 			a.log.Printf("[智能暂停] Tab → 暂停宏")
 		}
 	}
@@ -907,91 +899,7 @@ func pickHelper(env *helper.Env, settings store.HelperSettings) (helper.Helper, 
 		"若只想拾取，请启用「一键拾取」")
 }
 
-// quickPauseDoubleClickWindow 是双击判定的时间窗。
-const quickPauseDoubleClickWindow = 400 * time.Millisecond
 
-// quickPauseMouseVK 把设置里的鼠标键序号转成虚拟键码（1 左键 / 2 右键 / 3 中键 / 4 侧键·后退 / 5 侧键·前进）。
-func quickPauseMouseVK(idx int) uint16 {
-	switch idx {
-	case 1:
-		return keys.VKLeftMouse
-	case 2:
-		return keys.VKRightMouse
-	case 3:
-		return keys.VKMiddleMouse
-	case 4:
-		return keys.VKXButton1
-	case 5:
-		return keys.VKXButton2
-	}
-	return 0
-}
-
-// quickPauseClickVK 返回暂停期间需要连点的键（0 表示仅暂停、不连点）。
-func quickPauseClickVK(action int) uint16 {
-	if action == store.QuickPauseActionClickLeft {
-		return keys.VKLeftMouse
-	}
-	return 0
-}
-
-// tickQuickPause 在轮询循环里检测快速暂停的触发键。
-// 三种触发方式：双击（两次按下间隔小于 400ms）、单击、压住（按住期间暂停、松开恢复）。
-func (a *app) tickQuickPause(snap runtimeSnapshot) {
-	qp := snap.QuickPause
-	if !qp.Enabled || snap.Engine == nil {
-		return
-	}
-	vk := quickPauseMouseVK(qp.MouseKey)
-	if vk == 0 {
-		return
-	}
-	eng := snap.Engine
-	down := win32.KeyPressed(vk)
-	now := time.Now()
-
-	if down && !a.qpDown { // 按下沿
-		switch qp.Trigger {
-		case store.QuickPauseDoubleClick:
-			if !a.qpLastTap.IsZero() && now.Sub(a.qpLastTap) <= quickPauseDoubleClickWindow {
-				a.qpLastTap = time.Time{}
-				a.startQuickPause(eng, qp, now)
-				return
-			}
-			a.qpLastTap = now
-		case store.QuickPauseSingleClick, store.QuickPauseHold:
-			a.startQuickPause(eng, qp, now)
-		}
-	} else if !down && a.qpDown && qp.Trigger == store.QuickPauseHold {
-		eng.Resume()
-		a.log.Printf("[暂停] %s 松开 → 恢复宏", keyName(vk))
-	}
-	a.qpDown = down
-}
-
-// startQuickPause 触发一次快速暂停；「压住」模式传 0 表示持续到松开。
-func (a *app) startQuickPause(eng *engine.Engine, qp store.QuickPauseSettings, now time.Time) {
-	d := time.Duration(qp.DelayMS) * time.Millisecond
-	if qp.Trigger == store.QuickPauseHold {
-		d = 0
-	}
-	eng.QuickPause(now, d, quickPauseClickVK(qp.Action))
-	if d > 0 {
-		a.log.Printf("[暂停] 快速暂停 %d 毫秒", qp.DelayMS)
-		return
-	}
-	a.log.Printf("[暂停] 快速暂停（按住期间）")
-}
-
-// updateQuickPause 由界面在设置变更后调用：只更新运行期快照，无需重建引擎。
-func (a *app) updateQuickPause(qp store.QuickPauseSettings) {
-	snap := a.st.snapshot()
-	snap.QuickPause = qp
-	a.st.apply(snap)
-	if snap.Engine != nil && !qp.Enabled {
-		snap.Engine.Resume() // 关闭功能时立即恢复，避免卡在暂停态
-	}
-}
 
 func (a *app) notifyEngineError(err error) {
 	a.log.Printf("[发送错误] %v", err)

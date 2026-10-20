@@ -52,60 +52,14 @@ func TestGameKeysRejectsUnknownGame(t *testing.T) {
 	}
 }
 
-func TestQuickPauseValidation(t *testing.T) {
-	s := DefaultSettings()
-	if err := s.Validate(); err != nil {
-		t.Fatalf("默认快速暂停设置应当合法：%v", err)
-	}
-
-	s.QuickPause = DefaultQuickPause()
-	s.QuickPause.Trigger = 9
-	if err := s.Validate(); err == nil {
-		t.Fatal("非法触发方式应当被拒绝")
-	}
-
-	s.QuickPause = DefaultQuickPause()
-	s.QuickPause.MouseKey = 0
-	if err := s.Validate(); err == nil {
-		t.Fatal("非法鼠标键应当被拒绝")
-	}
-
-	s.QuickPause = DefaultQuickPause()
-	s.QuickPause.Action = 7
-	if err := s.Validate(); err == nil {
-		t.Fatal("非法行为取值应当被拒绝")
-	}
-
-	s.QuickPause = DefaultQuickPause()
-	s.QuickPause.DelayMS = 100
-	if err := s.Validate(); err == nil {
-		t.Fatal("超出范围的暂停时长应当被拒绝")
-	}
-
-	// 「暂停且连点左键」+ 左键触发 会自我触发：注入的连点被触发检测看到，
-	// 每 50ms 重置一次暂停时长，暂停永远结束不了。
-	s.QuickPause = DefaultQuickPause()
-	s.QuickPause.Action = QuickPauseActionClickLeft
-	s.QuickPause.MouseKey = 1
-	if err := s.Validate(); err == nil {
-		t.Fatal("左键触发 + 连点左键应当被拒绝")
-	}
-
-	// 换成别的鼠标键就合法。
-	s.QuickPause.MouseKey = 3
-	if err := s.Validate(); err != nil {
-		t.Fatalf("连点左键 + 中键触发应当合法：%v", err)
-	}
-}
-
 func TestSettingsApplyDefaults(t *testing.T) {
-	// 旧存档没有 quick_pause 字段，解析后是零值：必须先补齐默认值，否则校验必然失败。
+	// 旧存档缺少新增字段，解析后是零值：必须先补齐默认值，否则校验必然失败。
 	var s Settings
 	s.applyDefaults()
 	if err := s.Validate(); err != nil {
 		t.Fatalf("补齐默认值后应当合法：%v", err)
 	}
-	if s.QuickPause.Trigger != DefaultQuickPause().Trigger || s.CurrentGame == "" {
+	if s.CurrentGame == "" || s.FloatingHUD.Mode == "" || s.FloatingHUD.Attach == "" {
 		t.Fatalf("默认值未补齐：%+v", s)
 	}
 }

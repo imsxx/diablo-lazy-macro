@@ -334,14 +334,6 @@ function renderExtraSettings() {
 
   const startSelect = $id('startModeSelect');
   if (startSelect && state) startSelect.value = String(state.startMode || 0);
-
-  const qp = state && state.quickPause;
-  if (!qp) return;
-  setCheckedIfIdle($id('qpEnabled'), qp.enabled);
-  setValueIfIdle($id('qpTrigger'), String(qp.trigger));
-  setValueIfIdle($id('qpMouseKey'), String(qp.mouseKey));
-  setValueIfIdle($id('qpAction'), String(qp.action));
-  setValueIfIdle($id('qpDelay'), qp.delayMS);
 }
 
 function renderHelperSection() {
@@ -655,23 +647,6 @@ async function saveStartMode() {
   const sel = $id('startModeSelect');
   if (!sel) return;
   const r = await callApi('api_updateStartMode', parseInt(sel.value, 10) || 0);
-  if (!r.ok) {
-    await reloadState();
-    return;
-  }
-  await reloadState();
-  flashAutoSave();
-}
-
-async function saveQuickPause() {
-  const r = await callApi(
-    'api_updateQuickPause',
-    $id('qpEnabled').checked,
-    parseInt($id('qpTrigger').value, 10) || 0,
-    parseInt($id('qpMouseKey').value, 10) || 0,
-    parseInt($id('qpAction').value, 10) || 0,
-    parseInt($id('qpDelay').value, 10) || 0
-  );
   if (!r.ok) {
     await reloadState();
     return;

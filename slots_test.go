@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/imsxx/diablo-lazy-macro/internal/config"
-	"github.com/imsxx/diablo-lazy-macro/internal/store"
 )
 
 // 新游戏只给 1 个方案：一上来摆 4 个空配置只会让玩家多按几次标签页。
@@ -340,20 +339,6 @@ func TestUIClampLimitsWithinProtocol(t *testing.T) {
 	prof = slotsToProfile(defaultSlots(), tooLong, "", config.ModeConcurrent)
 	if _, err := config.Resolve(config.Raw{Version: config.Version, Profiles: []config.RawProfile{prof}}); err == nil {
 		t.Fatal("超出界面上限的配置名应被协议拒绝（说明界面上限落后于协议）")
-	}
-}
-
-// 快速暂停时长留空（0）在引擎里等于「暂停到手动恢复」，界面留空必须读作「沿用原值」。
-func TestNormalizeQuickPauseDelay(t *testing.T) {
-	prev := store.QuickPauseSettings{DelayMS: 1500}
-	if got := normalizeQuickPause(store.QuickPauseSettings{DelayMS: 0}, prev); got.DelayMS != 1500 {
-		t.Errorf("空时长应沿用原值，实际 %d", got.DelayMS)
-	}
-	if got := normalizeQuickPause(store.QuickPauseSettings{DelayMS: 0}, store.QuickPauseSettings{}); got.DelayMS != store.DefaultQuickPause().DelayMS {
-		t.Errorf("原值也缺失时应回落默认值，实际 %d", got.DelayMS)
-	}
-	if got := normalizeQuickPause(store.QuickPauseSettings{DelayMS: 2500}, prev); got.DelayMS != 2500 {
-		t.Errorf("正常时长应原样保留，实际 %d", got.DelayMS)
 	}
 }
 

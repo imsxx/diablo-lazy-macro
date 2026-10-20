@@ -200,13 +200,6 @@ type frontendState struct {
 	ToggleKey         string            `json:"toggleKey"`
 	ToggleKeyLabel    string            `json:"toggleKeyLabel"`
 	StartMode         int               `json:"startMode"`
-	QuickPause        struct {
-		Enabled  bool `json:"enabled"`
-		Trigger  int  `json:"trigger"`
-		MouseKey int  `json:"mouseKey"`
-		Action   int  `json:"action"`
-		DelayMS  int  `json:"delayMS"`
-	} `json:"quickPause"`
 	Helpers struct {
 		Hotkey        string          `json:"hotkey"`
 		HotkeyLabel   string          `json:"hotkeyLabel"`
@@ -712,28 +705,6 @@ func (w *mainWindow) initBindings() {
 		return w.commitOrRollback(func() { w.startMode = prev })
 	})
 
-	bind("api_updateQuickPause", func(enabled bool, trigger, mouseKey, action, delayMS int) error {
-		qp := normalizeQuickPause(store.QuickPauseSettings{
-			Enabled:  enabled,
-			Trigger:  trigger,
-			MouseKey: mouseKey,
-			Action:   action,
-			DelayMS:  delayMS,
-		}, w.app.settings.QuickPause)
-		if err := qp.Validate(); err != nil {
-			return err
-		}
-		prev := w.app.settings.QuickPause
-		w.app.settings.QuickPause = qp
-		if err := store.SaveSettings(w.app.dir, *w.app.settings); err != nil {
-			w.app.settings.QuickPause = prev
-			return err
-		}
-		w.app.updateQuickPause(qp)
-		w.refreshStatus()
-		return nil
-	})
-
 	// api_setHelperDevMode 只切换「助手详细日志」，与助手功能开关无关：
 	// 它是日志详细度，所以入口在运行日志浮层里，而不是辅助功能卡片。
 	bind("api_setHelperDevMode", func(on bool) error {
@@ -1018,14 +989,6 @@ func (w *mainWindow) buildFrontendState() *frontendState {
 			Slots:   slots,
 		}
 	}
-
-	// 快速暂停
-	qp := w.app.settings.QuickPause
-	s.QuickPause.Enabled = qp.Enabled
-	s.QuickPause.Trigger = qp.Trigger
-	s.QuickPause.MouseKey = qp.MouseKey
-	s.QuickPause.Action = qp.Action
-	s.QuickPause.DelayMS = qp.DelayMS
 
 	// 城镇助手
 	hs := w.app.settings.Helpers
@@ -1338,18 +1301,6 @@ func profileToSlots(prof config.RawProfile) [numSlots]skillSlotData {
 	}
 
 	return slots
-}
-
-// normalizeQuickPause 补全快速暂停里「留空表示沿用原值」的字段。
-// 时长填 0 在引擎里等于「一直暂停到手动恢复」，不能作为界面留空的解释，因此回退到当前值/默认值。
-func normalizeQuickPause(qp, prev store.QuickPauseSettings) store.QuickPauseSettings {
-	if qp.DelayMS <= 0 {
-		qp.DelayMS = prev.DelayMS
-		if qp.DelayMS <= 0 {
-			qp.DelayMS = store.DefaultQuickPause().DelayMS
-		}
-	}
-	return qp
 }
 
 // activeAfterDelete 计算删除方案 idx 后应激活的序号：

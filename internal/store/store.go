@@ -41,40 +41,6 @@ type GameKeys struct {
 	ForceStandKey string `json:"force_stand_key,omitempty"`
 }
 
-// 快速暂停的取值（与界面下拉一一对应），导出供界面与接线层复用。
-const (
-	QuickPauseDoubleClick = 1 // 触发方式：双击
-	QuickPauseSingleClick = 2 // 单击
-	QuickPauseHold        = 3 // 压住
-
-	QuickPauseActionPause     = 1 // 行为：仅暂停宏
-	QuickPauseActionClickLeft = 2 // 暂停宏且连点左键
-
-	QuickPauseMinDelayMS = 500
-	QuickPauseMaxDelayMS = 5000
-)
-
-// QuickPauseSettings 是「快速暂停」的全局设置：按鼠标键临时停手。
-// 它属于操作习惯（不随流派变化，也与具体游戏无关），因此既不分游戏、也不进分享码。
-type QuickPauseSettings struct {
-	Enabled  bool `json:"enabled,omitempty"`
-	Trigger  int  `json:"trigger,omitempty"`   // QuickPauseDoubleClick / SingleClick / Hold
-	MouseKey int  `json:"mouse_key,omitempty"` // 1 左键 2 右键 3 中键 4 侧键·后退 5 侧键·前进
-	Action   int  `json:"action,omitempty"`    // QuickPauseActionPause / ClickLeft
-	DelayMS  int  `json:"delay_ms,omitempty"`  // 单击 / 双击模式下的暂停时长
-}
-
-// DefaultQuickPause 返回快速暂停的缺省设置：默认关闭。
-// 触发键默认取鼠标侧键 2——侧键 1 已是默认启动键，左键则会被普通攻击频繁误触。
-func DefaultQuickPause() QuickPauseSettings {
-	return QuickPauseSettings{
-		Trigger:  QuickPauseDoubleClick,
-		MouseKey: 5,
-		Action:   QuickPauseActionPause,
-		DelayMS:  1500,
-	}
-}
-
 // 助手功能的默认值与取值范围。
 const (
 	// DefaultHelperHotkey 是触发助手的默认快捷键（与 D3keyHelper 一致）。
@@ -146,7 +112,6 @@ type Settings struct {
 	CurrentGame string              `json:"current_game"`
 	Processes   map[string]string   `json:"processes,omitempty"`    // 各游戏目标进程名的本地覆盖
 	GameKeys    map[string]GameKeys `json:"game_keys,omitempty"`    // 各游戏的按键映射（强制站立等）
-	QuickPause  QuickPauseSettings  `json:"quick_pause,omitempty"`  // 快速暂停（全局操作习惯）
 	SmartPause  bool                `json:"smart_pause,omitempty"`  // 智能暂停：按 Tab 暂停/恢复，按回车 / T / M 停止宏
 	SoundCue    bool                `json:"sound_cue,omitempty"`    // 切换配置成功时播放提示音
 	Helpers     HelperSettings      `json:"helpers,omitempty"`      // 助手功能（暗黑3 专属）
@@ -211,7 +176,6 @@ func Path(dir, name string) string {
 func DefaultSettings() *Settings {
 	return &Settings{
 		CurrentGame: games.Default().ID,
-		QuickPause:  DefaultQuickPause(),
 		FloatingHUD: DefaultFloatingHUD(),
 	}
 }
@@ -219,7 +183,6 @@ func DefaultSettings() *Settings {
 // applyDefaults 补齐缺失字段（旧存档升级用）：JSON 里没有的字段是零值，
 // 直接校验会失败，因此加载后先按默认值填平。
 func (s *Settings) applyDefaults() {
-	d := DefaultQuickPause()
 	// 首次启动（空值）与「当前游戏已从工具中移除」（如暗黑2R）都回落到默认游戏（暗黑4）。
 	if _, ok := games.Lookup(s.CurrentGame); !ok {
 		s.CurrentGame = games.Default().ID
@@ -235,18 +198,6 @@ func (s *Settings) applyDefaults() {
 		if _, ok := games.Lookup(id); !ok {
 			delete(s.GameKeys, id)
 		}
-	}
-	if s.QuickPause.Trigger == 0 {
-		s.QuickPause.Trigger = d.Trigger
-	}
-	if s.QuickPause.MouseKey == 0 {
-		s.QuickPause.MouseKey = d.MouseKey
-	}
-	if s.QuickPause.Action == 0 {
-		s.QuickPause.Action = d.Action
-	}
-	if s.QuickPause.DelayMS == 0 {
-		s.QuickPause.DelayMS = d.DelayMS
 	}
 	h := DefaultHelpers()
 	if s.Helpers.Hotkey == "" {
@@ -266,28 +217,6 @@ func (s *Settings) applyDefaults() {
 		s.FloatingHUD.X = 80
 		s.FloatingHUD.Y = 80
 	}
-}
-
-// Validate 校验快速暂停设置（供界面在写盘前先校验）。
-func (q QuickPauseSettings) Validate() error {
-	if q.Trigger < QuickPauseDoubleClick || q.Trigger > QuickPauseHold {
-		return fmt.Errorf("快速暂停的触发方式取值 %d 无效（1 双击 / 2 单击 / 3 压住）", q.Trigger)
-	}
-	if q.MouseKey < 1 || q.MouseKey > 5 {
-		return fmt.Errorf("快速暂停的鼠标键取值 %d 无效（1 左键 / 2 右键 / 3 中键 / 4 侧键·后退 / 5 侧键·前进）", q.MouseKey)
-	}
-	if q.Action < QuickPauseActionPause || q.Action > QuickPauseActionClickLeft {
-		return fmt.Errorf("快速暂停的行为取值 %d 无效（1 暂停宏 / 2 暂停宏且连点左键）", q.Action)
-	}
-	// 「暂停且连点左键」时不能再用左键触发：注入的连点会被自己的触发检测看到，
-	// 于是每 50ms 重置一次暂停时长，暂停永远结束不了。
-	if q.Action == QuickPauseActionClickLeft && q.MouseKey == 1 {
-		return fmt.Errorf("「暂停且连点左键」不能用左键触发：连点会被当成触发，导致暂停无法结束，请换一个鼠标键")
-	}
-	if q.DelayMS != 0 && (q.DelayMS < QuickPauseMinDelayMS || q.DelayMS > QuickPauseMaxDelayMS) {
-		return fmt.Errorf("快速暂停时长必须在 %d–%d 毫秒之间，实际 %d", QuickPauseMinDelayMS, QuickPauseMaxDelayMS, q.DelayMS)
-	}
-	return nil
 }
 
 // Validate 校验设置内容（Fail Fast）。
@@ -310,9 +239,6 @@ func (s *Settings) Validate() error {
 		if _, err := keys.Parse(gk.ForceStandKey); err != nil {
 			return fmt.Errorf("%s 的强制站立键无效：%v", id, err)
 		}
-	}
-	if err := s.QuickPause.Validate(); err != nil {
-		return err
 	}
 	if err := s.Helpers.Validate(); err != nil {
 		return err

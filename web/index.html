@@ -67,34 +67,8 @@
       </div>
     </div>
 
-    <!-- 第二行：快速暂停 + 悬浮窗显示方式 -->
+    <!-- 第二行：悬浮窗显示方式 -->
     <div class="global-row">
-      <span class="global-label">快速暂停</span>
-      <label class="checkbox-label" title="用鼠标键临时停手">
-        <input type="checkbox" id="qpEnabled" onchange="saveQuickPause()">
-        <span>启用</span>
-      </label>
-      <select class="select-dropdown xs" id="qpTrigger" onchange="saveQuickPause()" title="鼠标键的触发方式">
-        <option value="1">双击</option>
-        <option value="2">单击</option>
-        <option value="3">压住</option>
-      </select>
-      <select class="select-dropdown sm" id="qpMouseKey" onchange="saveQuickPause()" title="用哪个鼠标键触发">
-        <option value="1">左键</option>
-        <option value="2">右键</option>
-        <option value="3">中键</option>
-        <option value="4">侧键·后退</option>
-        <option value="5">侧键·前进</option>
-      </select>
-      <select class="select-dropdown md" id="qpAction" onchange="saveQuickPause()" title="暂停期间的行为">
-        <option value="1">暂停按键宏</option>
-        <option value="2">暂停且连点左键</option>
-      </select>
-      <input type="number" class="input-num xs" id="qpDelay" onchange="saveQuickPause()" min="500" max="5000"
-        placeholder="1500" title="暂停时长（500–5000 毫秒）；留空表示暂停到手动恢复">
-
-      <span class="global-sep"></span>
-
       <span class="global-label">悬浮窗</span>
       <label class="checkbox-label" title="在屏幕上显示宏状态的小浮窗">
         <input type="checkbox" id="hudEnabledCheck" onchange="saveHUDSettings()">

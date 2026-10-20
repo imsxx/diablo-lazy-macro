@@ -54,7 +54,7 @@ func TestEngineStatusOf(t *testing.T) {
 		t.Errorf("已停止时应为就绪，实际 %d", got)
 	}
 	eng.SetEnabled(true)
-	eng.QuickPause(time.Now(), time.Second, 0)
+	eng.QuickPause(time.Now(), time.Second)
 	if got := engineStatusOf(eng, true); got != statusPaused {
 		t.Errorf("快速暂停中应为已暂停，实际 %d", got)
 	}

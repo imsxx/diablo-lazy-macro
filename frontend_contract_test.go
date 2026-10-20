@@ -46,7 +46,7 @@ func TestFrontendStateJSONContract(t *testing.T) {
 	wanted := []string{
 		`"version"`,
 		`"currentGame"`, `"currentProfileIdx"`, `"profileNames"`, `"profiles"`,
-		`"toggleKeyLabel"`, `"startMode"`, `"quickPause"`,
+		`"toggleKeyLabel"`, `"startMode"`,
 		`"helpers"`, `"hotkey"`, `"hotkeyLabel"`, `"enabled"`,
 		`"allHelpers"`, `"id"`, `"name"`,
 		`"smartPause"`, `"soundCue"`, `"forceStandEnabled"`, `"forceStandKey"`, `"forceStandKeyLabel"`,
