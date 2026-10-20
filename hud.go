@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 	"unsafe"
 
 	"github.com/imsxx/diablo-lazy-macro/internal/store"
+	"github.com/imsxx/diablo-lazy-macro/internal/win32"
 	"golang.org/x/sys/windows"
 )
 
@@ -91,12 +93,13 @@ const (
 	TPM_RETURNCMD   = 0x0100
 	TPM_RIGHTBUTTON = 0x0002
 
-	cmdModeBar   = 1001
-	cmdModeBadge = 1002
-	cmdLockPos   = 1003
-	cmdGameOnly  = 1004
-	cmdOpenMain  = 1005
-	cmdHideHUD   = 1006
+	cmdModeBar    = 1001
+	cmdModeBadge  = 1002
+	cmdLockPos    = 1003
+	cmdGameOnly   = 1004
+	cmdOpenMain   = 1005
+	cmdHideHUD    = 1006
+	cmdAttachGame = 1007
 )
 
 type rect struct {
@@ -157,6 +160,15 @@ type floatingHUD struct {
 	cfgGameOnly bool
 	cfgLocked   bool
 	cfgMode     string
+	cfgAttach   string // "free" 任意位置 / "game" 贴在游戏窗口客户区
+	cfgOffsetX  int
+	cfgOffsetY  int
+
+	// 贴游戏窗口时用的句柄与节流时间戳（只在 tick 线程写）
+	gameHWND   uintptr
+	targetProc string
+	lastFollow time.Time
+	lastFind   time.Time
 
 	// GDI 预分配画刷与字体
 	hFont       uintptr
@@ -180,6 +192,7 @@ func newFloatingHUD(a *app) *floatingHUD {
 		gameTag:     strings.ToUpper(a.settings.CurrentGame),
 		profileName: "配置 1",
 		status:      0,
+		targetProc:  a.targetProcessOf(a.settings.CurrentGame),
 	}
 
 	hudInstanceLock.Lock()
@@ -289,8 +302,17 @@ func hudWndProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 	case WM_EXITSIZEMOVE:
 		var rc rect
 		procGetWindowRect.Call(hwnd, uintptr(unsafe.Pointer(&rc)))
-		h.app.settings.FloatingHUD.X = int(rc.Left)
-		h.app.settings.FloatingHUD.Y = int(rc.Top)
+		s := &h.app.settings.FloatingHUD
+		if s.Attach == "game" {
+			// 贴游戏时保存的是相对游戏客户区的偏移，游戏窗口重新开在别处也不会跑偏。
+			if gx, gy, ok := h.clientOrigin(); ok {
+				s.OffsetX = int(rc.Left) - gx
+				s.OffsetY = int(rc.Top) - gy
+			}
+		} else {
+			s.X = int(rc.Left)
+			s.Y = int(rc.Top)
+		}
 		_ = store.SaveSettings(h.app.dir, *h.app.settings)
 		return 0
 
@@ -377,6 +399,9 @@ func (h *floatingHUD) syncConfig() {
 	h.cfgGameOnly = s.GameOnly
 	h.cfgLocked = s.Locked
 	h.cfgMode = s.Mode
+	h.cfgAttach = s.Attach
+	h.cfgOffsetX = s.OffsetX
+	h.cfgOffsetY = s.OffsetY
 	h.mu.Unlock()
 }
 
@@ -436,12 +461,25 @@ func (h *floatingHUD) applySettings() {
 
 	s := h.app.settings.FloatingHUD
 	w, height := h.dimensions()
+	x, y := s.X, s.Y
+	if s.Attach == "game" {
+		gx, gy, ok := h.clientOrigin()
+		if !ok {
+			// 游戏还没开：先不显示，等 followGame 找到窗口后再摆出来。
+			procShowWindow.Call(h.hwnd, uintptr(SW_HIDE))
+			h.mu.Lock()
+			h.visible = false
+			h.mu.Unlock()
+			return
+		}
+		x, y = gx+s.OffsetX, gy+s.OffsetY
+	}
 	// 窗口是以 WS_POPUP（不含 WS_VISIBLE）创建的，光靠 SetWindowPos 不会显示出来；
 	// 必须带 SWP_SHOWWINDOW，否则 visible 被标成 true、轮询再也不调 ShowWindow，玩家永远看不到它。
 	procSetWindowPos.Call(
 		h.hwnd,
 		^uintptr(0), // HWND_TOPMOST ((HWND)-1)
-		uintptr(s.X), uintptr(s.Y),
+		uintptr(x), uintptr(y),
 		uintptr(w), uintptr(height),
 		uintptr(SWP_NOACTIVATE|SWP_FRAMECHANGED|SWP_SHOWWINDOW),
 	)
@@ -454,17 +492,131 @@ func (h *floatingHUD) applySettings() {
 	procUpdateWindow.Call(h.hwnd)
 }
 
+// clientOrigin 返回游戏窗口客户区左上角的屏幕坐标（贴游戏定位用）。
+// 句柄失效（游戏重启）时重新按目标进程查找一次。
+func (h *floatingHUD) clientOrigin() (int, int, bool) {
+	h.mu.Lock()
+	hwnd := h.gameHWND
+	proc := h.targetProc
+	h.mu.Unlock()
+	if proc == "" {
+		proc = h.app.targetProcessOf(h.app.settings.CurrentGame)
+	}
+	if hwnd == 0 || !win32.IsWindowAlive(windows.Handle(hwnd)) {
+		w, ok := win32.FindWindowByProcess(proc)
+		if !ok {
+			return 0, 0, false
+		}
+		hwnd = uintptr(w)
+		h.mu.Lock()
+		h.gameHWND = hwnd
+		h.targetProc = proc
+		h.lastFind = time.Now()
+		h.mu.Unlock()
+	}
+	_, _, cx, cy, err := win32.GetWindowClientSizeAndOrigin(windows.Handle(hwnd))
+	if err != nil {
+		return 0, 0, false
+	}
+	return int(cx), int(cy), true
+}
+
+func (h *floatingHUD) hide() {
+	if h.isVisible() {
+		procShowWindow.Call(h.hwnd, uintptr(SW_HIDE))
+		h.mu.Lock()
+		h.visible = false
+		h.mu.Unlock()
+	}
+}
+
+// followGame 让悬浮窗贴在游戏客户区上：游戏窗口移动时跟随，最小化/关闭时收起。
+// 每 80ms 最多定位一次（tick 是 10ms 级，没必要每帧都算）；找不到窗口时 700ms 才重试一次，
+// 避免在没开游戏的桌面上反复枚举窗口。
+func (h *floatingHUD) followGame(now time.Time) {
+	h.mu.Lock()
+	if h.cfgAttach != "game" {
+		h.mu.Unlock()
+		return
+	}
+	if !h.lastFollow.IsZero() && now.Sub(h.lastFollow) < 80*time.Millisecond {
+		h.mu.Unlock()
+		return
+	}
+	h.lastFollow = now
+	hwnd := h.gameHWND
+	proc := h.targetProc
+	ox, oy := h.cfgOffsetX, h.cfgOffsetY
+	lastFind := h.lastFind
+	h.mu.Unlock()
+
+	if hwnd == 0 || !win32.IsWindowAlive(windows.Handle(hwnd)) {
+		if !lastFind.IsZero() && now.Sub(lastFind) < 700*time.Millisecond {
+			h.hide()
+			return
+		}
+		if proc == "" {
+			proc = h.app.targetProcessOf(h.app.settings.CurrentGame)
+		}
+		w, ok := win32.FindWindowByProcess(proc)
+		h.mu.Lock()
+		h.lastFind = now
+		h.mu.Unlock()
+		if !ok {
+			h.hide()
+			return
+		}
+		hwnd = uintptr(w)
+		h.mu.Lock()
+		h.gameHWND = hwnd
+		h.targetProc = proc
+		h.mu.Unlock()
+	}
+	if win32.IsWindowMinimized(windows.Handle(hwnd)) {
+		h.hide()
+		return
+	}
+	_, _, cx, cy, err := win32.GetWindowClientSizeAndOrigin(windows.Handle(hwnd))
+	if err != nil {
+		h.hide()
+		return
+	}
+	w, hgt := h.dimensions()
+	procSetWindowPos.Call(
+		h.hwnd,
+		^uintptr(0),
+		uintptr(int(cx)+ox), uintptr(int(cy)+oy),
+		uintptr(w), uintptr(hgt),
+		uintptr(SWP_NOACTIVATE|SWP_SHOWWINDOW),
+	)
+	if !h.isVisible() {
+		procShowWindow.Call(h.hwnd, uintptr(SW_SHOWNOACTIVATE))
+		h.mu.Lock()
+		h.visible = true
+		h.mu.Unlock()
+	}
+}
+
 func (h *floatingHUD) resetPosition() {
 	if h.hwnd == 0 {
 		return
 	}
-	h.app.settings.FloatingHUD.X = 80
-	h.app.settings.FloatingHUD.Y = 80
+	s := &h.app.settings.FloatingHUD
 	w, height := h.dimensions()
+	x, y := 80, 80
+	if s.Attach == "game" {
+		// 贴游戏时「重置」= 回到游戏客户区左上角，而不是屏幕左上角。
+		s.OffsetX, s.OffsetY = 16, 16
+		if gx, gy, ok := h.clientOrigin(); ok {
+			x, y = gx+16, gy+16
+		}
+	} else {
+		s.X, s.Y = 80, 80
+	}
 	procSetWindowPos.Call(
 		h.hwnd,
 		0,
-		uintptr(80), uintptr(80),
+		uintptr(x), uintptr(y),
 		uintptr(w), uintptr(height),
 		uintptr(SWP_NOACTIVATE|SWP_NOZORDER|SWP_FRAMECHANGED|SWP_SHOWWINDOW),
 	)
@@ -501,6 +653,7 @@ func (h *floatingHUD) update(snap runtimeSnapshot, foreground bool) {
 	if h.gameTag == "" {
 		h.gameTag = "D3"
 	}
+	h.targetProc = snap.TargetProcess
 
 	if snap.Engine != nil {
 		h.profileIdx = snap.Engine.ProfileIndex()
@@ -528,6 +681,8 @@ func (h *floatingHUD) update(snap runtimeSnapshot, foreground bool) {
 	if changed {
 		procInvalidateRect.Call(h.hwnd, 0, 0)
 	}
+	// 贴游戏模式：跟随游戏窗口（内部有 80ms 节流，不会每个 tick 都重定位）。
+	h.followGame(time.Now())
 }
 
 func (h *floatingHUD) paint(hwnd uintptr) {
@@ -654,8 +809,14 @@ func (h *floatingHUD) showContextMenu(hwnd uintptr) {
 		checkGameOnly = uintptr(MF_CHECKED)
 	}
 
+	checkAttach := uintptr(MF_UNCHECKED)
+	if s.Attach == "game" {
+		checkAttach = uintptr(MF_CHECKED)
+	}
+
 	mBar, _ := windows.UTF16PtrFromString("战术横条形态")
 	mBadge, _ := windows.UTF16PtrFromString("紧凑方标形态")
+	mAttach, _ := windows.UTF16PtrFromString("贴在游戏窗口上（随游戏移动）")
 	mLock, _ := windows.UTF16PtrFromString("锁定位置 (禁止拖拽)")
 	mGameOnly, _ := windows.UTF16PtrFromString("仅游戏在前台时显示")
 	mOpen, _ := windows.UTF16PtrFromString("打开主设置窗口")
@@ -664,6 +825,7 @@ func (h *floatingHUD) showContextMenu(hwnd uintptr) {
 	procAppendMenuW.Call(hMenu, uintptr(MF_STRING)|checkBar, uintptr(cmdModeBar), uintptr(unsafe.Pointer(mBar)))
 	procAppendMenuW.Call(hMenu, uintptr(MF_STRING)|checkBadge, uintptr(cmdModeBadge), uintptr(unsafe.Pointer(mBadge)))
 	procAppendMenuW.Call(hMenu, uintptr(MF_SEPARATOR), 0, 0)
+	procAppendMenuW.Call(hMenu, uintptr(MF_STRING)|checkAttach, uintptr(cmdAttachGame), uintptr(unsafe.Pointer(mAttach)))
 	procAppendMenuW.Call(hMenu, uintptr(MF_STRING)|checkLock, uintptr(cmdLockPos), uintptr(unsafe.Pointer(mLock)))
 	procAppendMenuW.Call(hMenu, uintptr(MF_STRING)|checkGameOnly, uintptr(cmdGameOnly), uintptr(unsafe.Pointer(mGameOnly)))
 	procAppendMenuW.Call(hMenu, uintptr(MF_SEPARATOR), 0, 0)
@@ -692,6 +854,31 @@ func (h *floatingHUD) showContextMenu(hwnd uintptr) {
 
 	case cmdModeBadge:
 		h.app.settings.FloatingHUD.Mode = "badge"
+		_ = store.SaveSettings(h.app.dir, *h.app.settings)
+		h.applySettings()
+		if h.app.win != nil {
+			h.app.win.refreshStatus()
+		}
+
+	case cmdAttachGame:
+		// 两种定位互转：按当前实际位置换算，避免切模式瞬间跳到屏幕角落。
+		s := &h.app.settings.FloatingHUD
+		var rc rect
+		procGetWindowRect.Call(hwnd, uintptr(unsafe.Pointer(&rc)))
+		if s.Attach == "game" {
+			s.Attach = "free"
+			s.X = int(rc.Left)
+			s.Y = int(rc.Top)
+		} else {
+			if gx, gy, ok := h.clientOrigin(); ok {
+				s.Attach = "game"
+				s.OffsetX = int(rc.Left) - gx
+				s.OffsetY = int(rc.Top) - gy
+			} else {
+				h.app.log.Printf("[HUD] 没找到游戏窗口，暂时无法贴到游戏上（开游戏后再试）")
+				return
+			}
+		}
 		_ = store.SaveSettings(h.app.dir, *h.app.settings)
 		h.applySettings()
 		if h.app.win != nil {

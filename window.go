@@ -231,6 +231,7 @@ type frontendHUD struct {
 	Mode     string `json:"mode"`
 	Locked   bool   `json:"locked"`
 	GameOnly bool   `json:"gameOnly"`
+	Attach   string `json:"attach"` // "free" 任意位置 / "game" 贴游戏窗口
 	X        int    `json:"x"`
 	Y        int    `json:"y"`
 }
@@ -813,10 +814,14 @@ func (w *mainWindow) initBindings() {
 		return nil
 	})
 
-	bind("api_updateHUD", func(enabled bool, mode string, locked bool, gameOnly bool) error {
+	bind("api_updateHUD", func(enabled bool, mode string, locked bool, gameOnly bool, attach string) error {
 		mode = strings.TrimSpace(mode)
 		if mode != "" && mode != "bar" && mode != "badge" {
 			return fmt.Errorf("悬浮窗形态 %q 无效（有效值：bar / badge）", mode)
+		}
+		attach = strings.TrimSpace(attach)
+		if attach != "" && attach != "free" && attach != "game" {
+			return fmt.Errorf("悬浮窗定位方式 %q 无效（有效值：free / game）", attach)
 		}
 		hud := w.app.settings.FloatingHUD
 		prev := hud
@@ -824,6 +829,9 @@ func (w *mainWindow) initBindings() {
 		hud.Mode = mode
 		hud.Locked = locked
 		hud.GameOnly = gameOnly
+		if attach != "" {
+			hud.Attach = attach
+		}
 		w.app.settings.FloatingHUD = hud
 		if err := store.SaveSettings(w.app.dir, *w.app.settings); err != nil {
 			w.app.settings.FloatingHUD = prev
@@ -832,6 +840,8 @@ func (w *mainWindow) initBindings() {
 		if w.app.hud != nil {
 			w.app.hud.applySettings()
 		}
+		w.app.log.Printf("[HUD] 设置：开关=%v 形态=%s 定位=%s 锁定=%v 仅前台=%v",
+			hud.Enabled, hud.Mode, hud.Attach, hud.Locked, hud.GameOnly)
 		w.refreshStatus()
 		return nil
 	})
@@ -1062,6 +1072,7 @@ func (w *mainWindow) buildFrontendState() *frontendState {
 		Mode:     hudCfg.Mode,
 		Locked:   hudCfg.Locked,
 		GameOnly: hudCfg.GameOnly,
+		Attach:   hudCfg.Attach,
 		X:        hudCfg.X,
 		Y:        hudCfg.Y,
 	}

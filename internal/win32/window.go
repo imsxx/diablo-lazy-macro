@@ -20,6 +20,8 @@ var (
 	procGetWindowThreadProcessId = user32.NewProc("GetWindowThreadProcessId")
 	procEnumWindows              = user32.NewProc("EnumWindows")
 	procIsWindowVisible          = user32.NewProc("IsWindowVisible")
+	procIsWindow                 = user32.NewProc("IsWindow")
+	procIsIconic                 = user32.NewProc("IsIconic")
 	procGetWindowRect            = user32.NewProc("GetWindowRect")
 	procSetForegroundWindow      = user32.NewProc("SetForegroundWindow")
 	procShowWindow               = user32.NewProc("ShowWindow")
@@ -170,6 +172,24 @@ func ForegroundProcessName() (string, bool) {
 	fgProcCache.hwnd = hwnd
 	fgProcCache.name = name
 	return name, true
+}
+
+// IsWindowAlive 报告句柄是否仍指向一个存在的窗口（游戏重启后旧句柄会失效）。
+func IsWindowAlive(hwnd windows.Handle) bool {
+	if hwnd == 0 {
+		return false
+	}
+	r, _, _ := procIsWindow.Call(uintptr(hwnd))
+	return r != 0
+}
+
+// IsWindowMinimized 报告窗口是否最小化：悬浮窗贴在游戏上时，游戏最小化就要跟着收起来。
+func IsWindowMinimized(hwnd windows.Handle) bool {
+	if hwnd == 0 {
+		return false
+	}
+	r, _, _ := procIsIconic.Call(uintptr(hwnd))
+	return r != 0
 }
 
 // GetForegroundWindow 返回当前前台窗口信息，用于「只在游戏前台时发送」的保护与真实窗口信息采集。

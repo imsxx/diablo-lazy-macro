@@ -157,10 +157,15 @@ type Settings struct {
 type FloatingHUDSettings struct {
 	Enabled  bool   `json:"enabled"`             // 是否开启悬浮窗
 	Mode     string `json:"mode,omitempty"`      // "bar"（战术横条）或 "badge"（紧凑方标）
-	X        int    `json:"x,omitempty"`         // 屏幕 X 坐标
-	Y        int    `json:"y,omitempty"`         // 屏幕 Y 坐标
+	X        int    `json:"x,omitempty"`         // 自由定位：屏幕 X 坐标
+	Y        int    `json:"y,omitempty"`         // 自由定位：屏幕 Y 坐标
 	Locked   bool   `json:"locked,omitempty"`    // 是否锁定位置（禁止拖拽）
 	GameOnly bool   `json:"game_only,omitempty"` // 是否仅游戏位于前台时显示
+	// Attach 是定位方式："free" 自由放在屏幕上（用 X/Y），
+	// "game" 贴在游戏窗口客户区上（用 OffsetX/OffsetY，随游戏窗口移动、最小化时隐藏）。
+	Attach  string `json:"attach,omitempty"`
+	OffsetX int    `json:"offset_x,omitempty"`
+	OffsetY int    `json:"offset_y,omitempty"`
 }
 
 // DefaultFloatingHUD 返回悬浮窗默认设置。
@@ -174,12 +179,16 @@ func DefaultFloatingHUD() FloatingHUDSettings {
 		Y:        80,
 		Locked:   false,
 		GameOnly: false,
+		Attach:   "free",
 	}
 }
 
 func (f FloatingHUDSettings) validate() error {
 	if f.Mode != "" && f.Mode != "bar" && f.Mode != "badge" {
 		return fmt.Errorf("悬浮窗形态 %q 无效（有效值：bar / badge）", f.Mode)
+	}
+	if f.Attach != "" && f.Attach != "free" && f.Attach != "game" {
+		return fmt.Errorf("悬浮窗定位方式 %q 无效（有效值：free / game）", f.Attach)
 	}
 	return nil
 }
@@ -248,6 +257,10 @@ func (s *Settings) applyDefaults() {
 	}
 	if s.FloatingHUD.Mode == "" {
 		s.FloatingHUD.Mode = "bar"
+	}
+	// 旧存档没有定位方式字段：默认「自由放在屏幕上」，与升级前行为一致。
+	if s.FloatingHUD.Attach == "" {
+		s.FloatingHUD.Attach = "free"
 	}
 	if s.FloatingHUD.X <= 0 && s.FloatingHUD.Y <= 0 {
 		s.FloatingHUD.X = 80

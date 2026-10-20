@@ -102,14 +102,20 @@
           <option value="bar">战术横条</option>
           <option value="badge">紧凑方标</option>
         </select>
-        <label class="checkbox-label sm">
+        <span class="form-label">位置：</span>
+        <select class="select-dropdown xs" id="hudAttachSelect" onchange="saveHUDSettings()"
+          title="任意位置：自由摆在屏幕上（记住坐标）；贴游戏：跟随游戏窗口移动，游戏最小化时一起收起">
+          <option value="free">任意位置</option>
+          <option value="game">贴游戏</option>
+        </select>
+        <label class="checkbox-label sm" title="锁定位置（禁止拖拽）">
           <input type="checkbox" id="hudLockedCheck" onchange="saveHUDSettings()">
-          <span>锁定位置</span>
+          <span>锁定</span>
         </label>
         <label class="checkbox-label sm"
           title="勾选后只在游戏位于前台时出现。看不到悬浮窗时，先取消这个勾选">
           <input type="checkbox" id="hudGameOnlyCheck" onchange="saveHUDSettings()">
-          <span>仅前台显示</span>
+          <span>仅前台</span>
         </label>
         <button class="tool-btn xs" onclick="resetHUDPos()" title="悬浮窗若移出屏幕可一键复位">重置位置</button>
       </span>

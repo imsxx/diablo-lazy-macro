@@ -398,6 +398,7 @@ function renderPreferences() {
   const hud = state.hud;
   if (!hud) return;
   setValueIfIdle($id('hudModeSelect'), hud.mode || 'bar');
+  setValueIfIdle($id('hudAttachSelect'), hud.attach || 'free');
   setCheckedIfIdle($id('hudLockedCheck'), !!hud.locked);
   setCheckedIfIdle($id('hudGameOnlyCheck'), !!hud.gameOnly);
 
@@ -725,7 +726,8 @@ async function saveHUDSettings() {
     !!hud.enabled,
     $id('hudModeSelect').value,
     $id('hudLockedCheck').checked,
-    $id('hudGameOnlyCheck').checked
+    $id('hudGameOnlyCheck').checked,
+    $id('hudAttachSelect').value
   );
   if (!r.ok) {
     await reloadState();
@@ -739,7 +741,7 @@ async function saveHUDSettings() {
 async function toggleHUD() {
   if (!state || !state.hud) return;
   const hud = state.hud;
-  const r = await callApi('api_updateHUD', !hud.enabled, hud.mode || 'bar', !!hud.locked, !!hud.gameOnly);
+  const r = await callApi('api_updateHUD', !hud.enabled, hud.mode || 'bar', !!hud.locked, !!hud.gameOnly, hud.attach || 'free');
   if (!r.ok) {
     await reloadState();
     return;
