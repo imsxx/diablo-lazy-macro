@@ -385,8 +385,6 @@ function renderPreferences() {
     standBtn.title = '连点左键技能前先按住的键（仅键盘键；可清除为游戏默认键）';
   }
 
-  renderHUDToggle();
-
   const hud = state.hud;
   if (!hud) return;
   setCheckedIfIdle($id('hudEnabledCheck'), !!hud.enabled);
@@ -401,17 +399,6 @@ function renderPreferences() {
   if (optionsRow) {
     optionsRow.classList.toggle('disabled', !hud.enabled);
   }
-}
-
-// renderHUDToggle 把顶栏「悬浮窗」按钮的开关态与后端设置对齐（它是全局开关，不属于任何方案）。
-function renderHUDToggle() {
-  const btn = $id('hudToggleBtn');
-  if (!btn) return;
-  const on = !!(state && state.hud && state.hud.enabled);
-  btn.classList.toggle('active', on);
-  // 按钮上直接写状态：只有「悬浮窗」三个字时，玩家不知道它现在是开还是关。
-  btn.textContent = on ? '悬浮窗 开' : '悬浮窗 关';
-  btn.title = on ? '悬浮窗已开启：点击关闭' : '悬浮窗已关闭：点击开启';
 }
 
 function renderStatus() {
@@ -710,20 +697,6 @@ async function saveHUDSettings() {
   }
   await reloadState();
   flashAutoSave();
-}
-
-// toggleHUD 是顶栏那颗全局开关：与具体游戏、具体方案都无关。
-async function toggleHUD() {
-  if (!state || !state.hud) return;
-  const hud = state.hud;
-  const r = await callApi('api_updateHUD', !hud.enabled, hud.mode || 'bar', !!hud.locked, !!hud.gameOnly, hud.attach || 'free');
-  if (!r.ok) {
-    await reloadState();
-    return;
-  }
-  await reloadState();
-  flashAutoSave();
-  showNotice(hud.enabled ? '悬浮窗已关闭' : '悬浮窗已开启（默认在屏幕左上角）', 'ok');
 }
 
 async function resetHUDPos() {

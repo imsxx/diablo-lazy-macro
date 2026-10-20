@@ -169,11 +169,9 @@ body {
   border-color: #404454;
 }
 
-/* 顶栏的全局开关（悬浮窗）：开启时用强调色，与「导入/复制/日志」这类动作按钮区分开 */
-.tool-btn.hud-toggle.active {
-  border-color: var(--color-accent);
-  color: var(--color-accent);
-  background: #2a2214;
+/* 启停键在全局设置行里：紧凑一些，避免把那一行撑高 */
+.global-row .header-macro-toggle {
+  padding: 1px 8px;
 }
 
 /* 破坏性操作按钮（删除配置等）：红色描边，避免和普通按钮混在一起 */

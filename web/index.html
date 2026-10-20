@@ -7,21 +7,12 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <!-- 标题栏：全局入口（游戏 / 启停键 / 悬浮窗 / 分享码 / 日志）+ 窗口控制 -->
+  <!-- 标题栏：只放窗口级动作（分享码 / 日志 / 窗口控制），配置项一律放下面的全局设置区 -->
   <header class="app-header" id="appHeader">
     <div class="header-brand">
       <span class="brand-title">暗黑懒人宏</span>
       <span class="brand-version" id="appVersion">v0.2.0</span>
     </div>
-
-    <div class="header-macro-toggle">
-      <span class="header-macro-label">启停键：</span>
-      <button class="keycap-btn highlight header-keycap" id="toggleKeyBtn"
-        onclick="captureToggleKey()" title="点击修改战斗宏启停快捷键">X1</button>
-    </div>
-
-    <button class="tool-btn hud-toggle" id="hudToggleBtn" onclick="toggleHUD()"
-      title="切换在场游戏悬浮指示器">悬浮窗</button>
 
     <div class="header-tools">
       <button class="tool-btn" onclick="importCode()" title="从剪贴板读取分享码，确认后导入">导入分享码</button>
@@ -39,12 +30,17 @@
 
   <!-- ===== 全局设置区：不随游戏、不随方案变化的功能，统一放在顶部 ===== -->
   <section class="global-bar">
-    <!-- 第一行：宏怎么跑 -->
+    <!-- 第一行：宏怎么跑（启停键属于配置，不占窗口标题那一排） -->
     <div class="global-row">
       <span class="global-label">宏运行</span>
+      <div class="header-macro-toggle">
+        <span class="header-macro-label">启停键</span>
+        <button class="keycap-btn highlight header-keycap" id="toggleKeyBtn"
+          onclick="captureToggleKey()" title="点击修改战斗宏启停快捷键">X1</button>
+      </div>
       <div class="form-item">
-        <span class="form-label">启动方式：</span>
-        <select class="select-dropdown lg" id="startModeSelect" onchange="saveStartMode()"
+        <span class="form-label">启动：</span>
+        <select class="select-dropdown md" id="startModeSelect" onchange="saveStartMode()"
           title="懒人模式：按一下启停键切换开/关；仅按下时：按住启停键期间才生效">
           <option value="0">懒人模式 (开关切换)</option>
           <option value="1">仅按下时 (按住生效)</option>
@@ -56,7 +52,7 @@
       </label>
       <label class="checkbox-label" title="按热键切换配置成功时播放提示音">
         <input type="checkbox" id="soundCueCheck" onchange="savePreferences()">
-        <span>切换配置成功播放提示音</span>
+        <span>切换配置提示音</span>
       </label>
       <div class="form-item">
         <label class="checkbox-label" title="连点左键技能前先按住站立键，避免角色走动（暗黑3）">
