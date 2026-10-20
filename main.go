@@ -30,9 +30,12 @@ import (
 )
 
 const (
-	appName      = "Diablo Lazy Macro · 暗黑懒人宏"
-	version      = "0.2.0-dev"
-	tickInterval = 10 * time.Millisecond
+	appName = "Diablo Lazy Macro · 暗黑懒人宏"
+	version = "0.2.0-dev"
+	// idlePoll 是「没有待发按键时」的检测周期：启停键、方案切换键、快速暂停都靠它轮询。
+	// 真正要按键时不靠它定拍——引擎会给出下一条规则的到期时刻，循环睡到那一刻再醒，
+	// 所以 2ms/5ms 的间隔不会被向上取整成 10ms（精度交给系统定时器与游戏）。
+	idlePoll = 5 * time.Millisecond
 )
 
 // winSender 把 internal/win32 的输入合成接入规则引擎。
@@ -822,15 +825,17 @@ func (a *app) openDataDir() {
 
 func (a *app) startTicker() {
 	go func() {
-		ticker := time.NewTicker(tickInterval)
-		defer ticker.Stop()
+		timer := time.NewTimer(time.Millisecond)
+		defer timer.Stop()
 		var (
 			prevToggle  bool
 			lastEnabled bool
 			lastProfile = -1
 			prevSwitch  []bool
 		)
-		for range ticker.C {
+		for {
+			<-timer.C
+			now := time.Now()
 			snap := a.st.snapshot()
 
 			if snap.StartMode == 1 { // 仅按下时 (按住生效)
@@ -852,49 +857,63 @@ func (a *app) startTicker() {
 				prevToggle = pressed
 			}
 
+			// 默认按检测周期醒来看按键；引擎有待发按键时改睡到它的到期时刻。
+			next := now.Add(idlePoll)
+
 			if snap.Engine == nil {
 				if a.hud != nil {
 					a.hud.update(snap, false)
 				}
-				continue
-			}
-			// 方案切换键：任一方案的切换键被按下即切到该方案（全局生效，与前台无关）
-			if n := snap.Engine.ProfileCount(); n > 0 {
-				if len(prevSwitch) != n {
-					prevSwitch = make([]bool, n)
-				}
-				current := snap.Engine.ProfileIndex()
-				for i := 0; i < n; i++ {
-					vk := snap.Engine.SwitchVK(i)
-					down := vk != 0 && win32.KeyPressed(vk)
-					if down && !prevSwitch[i] && i != current {
-						idx := i
-						a.log.Printf("[热键] %s → 切换方案 %s", keyName(vk), profileDisplayName(snap.Engine, idx))
-						a.sync(func() { a.switchProfile(idx) })
+			} else {
+				// 方案切换键：任一方案的切换键被按下即切到该方案（全局生效，与前台无关）
+				if n := snap.Engine.ProfileCount(); n > 0 {
+					if len(prevSwitch) != n {
+						prevSwitch = make([]bool, n)
 					}
-					prevSwitch[i] = down
+					current := snap.Engine.ProfileIndex()
+					for i := 0; i < n; i++ {
+						vk := snap.Engine.SwitchVK(i)
+						down := vk != 0 && win32.KeyPressed(vk)
+						if down && !prevSwitch[i] && i != current {
+							idx := i
+							a.log.Printf("[热键] %s → 切换方案 %s", keyName(vk), profileDisplayName(snap.Engine, idx))
+							a.sync(func() { a.switchProfile(idx) })
+						}
+						prevSwitch[i] = down
+					}
+				}
+				// 快速暂停：按鼠标键（单击 / 双击 / 压住）临时停手
+				a.tickQuickPause(snap)
+				// 智能暂停：聊天 / 开地图 / 回城时自动让路
+				a.tickSmartPause(snap)
+				// 助手功能（暗黑3）：按快捷键触发，运行中再按一次打断
+				a.tickHelper(snap)
+
+				fg, err := win32.GetForegroundWindow()
+				foreground := err == nil && win32.MatchProcess(fg.ProcessName, snap.TargetProcess)
+				snap.Engine.Tick(now, foreground)
+
+				if a.hud != nil {
+					a.hud.update(snap, foreground)
+				}
+
+				if enabled := snap.Engine.Enabled(); enabled != lastEnabled || snap.Engine.ProfileIndex() != lastProfile {
+					lastEnabled = enabled
+					lastProfile = snap.Engine.ProfileIndex()
+					a.refreshUIAsync()
+				}
+
+				// Tick 之后再问：这样拿到的是最新的到期时刻。
+				if due := snap.Engine.NextDue(now); !due.IsZero() && due.Before(next) {
+					next = due
 				}
 			}
-			// 快速暂停：按鼠标键（单击 / 双击 / 压住）临时停手
-			a.tickQuickPause(snap)
-			// 智能暂停：聊天 / 开地图 / 回城时自动让路
-			a.tickSmartPause(snap)
-			// 助手功能（暗黑3）：按快捷键触发，运行中再按一次打断
-			a.tickHelper(snap)
 
-			fg, err := win32.GetForegroundWindow()
-			foreground := err == nil && win32.MatchProcess(fg.ProcessName, snap.TargetProcess)
-			snap.Engine.Tick(time.Now(), foreground)
-
-			if a.hud != nil {
-				a.hud.update(snap, foreground)
+			d := next.Sub(now)
+			if d < time.Millisecond {
+				d = time.Millisecond
 			}
-
-			if enabled := snap.Engine.Enabled(); enabled != lastEnabled || snap.Engine.ProfileIndex() != lastProfile {
-				lastEnabled = enabled
-				lastProfile = snap.Engine.ProfileIndex()
-				a.refreshUIAsync()
-			}
+			timer.Reset(d)
 		}
 	}()
 }

@@ -14,10 +14,6 @@ import (
 const (
 	// buffResampleDelay 是「Buff 仍在生效」时的重采样间隔：既不频繁取色，也不会错过 Buff 断裂。
 	buffResampleDelay = 150 * time.Millisecond
-	// minDelayMS 是延迟生效阈值：|延迟| 未超过该值视为关闭（与 D3keyHelper 的 20ms 门槛一致）。
-	minDelayMS = 20
-	// randDelayFloorMS 是延迟随机的下限（对齐 D3keyHelper 的 Random(10, 延迟)）。
-	randDelayFloorMS = 10
 	// quickPauseClickInterval 是「暂停宏且连点左键」的点击节奏（对齐 D3keyHelper 的 50ms）。
 	quickPauseClickInterval = 50 * time.Millisecond
 )
@@ -424,22 +420,28 @@ func (e *Engine) buffGateLocked(st *ruleState) bool {
 }
 
 // delayOffsetLocked 计算本周期内发送时点的偏移：
-// 正延迟在周期内偏后等待；负延迟推迟到周期末尾前 |延迟|（等价于 interval + 延迟）。
-// |延迟| 未超过阈值视为关闭；勾选延迟随机时取 0～|延迟| 之间的随机值。
+// 正延迟在周期内偏后等待；负延迟推迟到周期末尾前（等价于 interval - 幅度）。
+// 幅度在 [DelayMinMS, |DelayMS|] 之间随机取（两者相等即固定延迟）。
+// 刻意不设「太小视为关闭」的门槛：2ms 就是 2ms，实际精度由系统定时器与游戏决定。
 func (e *Engine) delayOffsetLocked(r config.ParsedRule) time.Duration {
 	raw := r.DelayMS
 	if raw == 0 {
 		return 0
 	}
-	mag := raw
-	if mag < 0 {
-		mag = -mag
+	hi := raw
+	if hi < 0 {
+		hi = -hi
 	}
-	if mag <= minDelayMS {
-		return 0
+	lo := r.DelayMinMS
+	if lo < 0 {
+		lo = -lo
 	}
-	if r.RandomDelay {
-		mag = randDelayFloorMS + e.randIntn(mag-randDelayFloorMS+1)
+	if lo > hi {
+		lo = hi
+	}
+	mag := hi
+	if lo > 0 {
+		mag = lo + e.randIntn(hi-lo+1)
 	}
 	offset := mag
 	if raw < 0 {
@@ -449,6 +451,59 @@ func (e *Engine) delayOffsetLocked(r config.ParsedRule) time.Duration {
 		}
 	}
 	return time.Duration(offset) * time.Millisecond
+}
+
+// NextDue 返回下一次「需要精确唤醒」的时刻（发送、Buff 重采样或快速暂停的连点）。
+// 零值表示当前没有待办：调用方按自己的检测周期继续轮询即可。
+// 主循环据此睡到该时刻，发送精度由系统定时器决定，而不是被轮询周期量化——
+// 这样 2ms 的间隔不会被向上取整成 10ms。
+func (e *Engine) NextDue(now time.Time) time.Time {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	var next time.Time
+	consider := func(t time.Time) {
+		if t.IsZero() || !t.After(now) {
+			return // 已过期的时刻不需要"精确唤醒"：本次 Tick 已经处理过
+		}
+		if next.IsZero() || t.Before(next) {
+			next = t
+		}
+	}
+
+	if e.paused {
+		if e.pauseClickVK != 0 {
+			consider(e.pauseNextClick)
+		}
+		if !e.pauseUntil.IsZero() {
+			consider(e.pauseUntil)
+		}
+		return next
+	}
+	if !e.enabled {
+		return time.Time{}
+	}
+	if e.mode == config.ModeSequential {
+		consider(e.seqNext)
+		return next
+	}
+	for i := range e.rules {
+		st := &e.rules[i]
+		if !st.active {
+			continue
+		}
+		switch st.rule.Kind {
+		case config.ActionTap:
+			if st.fireAt.IsZero() {
+				consider(st.nextFire)
+			} else {
+				consider(st.fireAt)
+			}
+		case config.ActionSeq:
+			consider(st.nextFire)
+		}
+	}
+	return next
 }
 
 func (e *Engine) activateLocked(st *ruleState, now time.Time) {

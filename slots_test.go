@@ -120,10 +120,18 @@ func TestSlotExplanation(t *testing.T) {
 		t.Errorf("连点 1ms 说明不符：%s", expSpam)
 	}
 
-	// 延迟与「±随机」已合并：填了幅度，说明里要直接讲清"随机波动"，而不是让玩家去猜。
-	sDelayed := skillSlotData{Key: "3", Strategy: 2, IntervalMS: 250, DelayMS: -40}
-	if got := slotExplanation(sDelayed); got != "每 250ms 连点「3」，延迟在最多 40ms 内随机波动" {
-		t.Errorf("带延迟的连点说明不符：%s", got)
+	// 延迟用区间表达：上下界相同 = 固定；不同 = 随机；负数 = 周期末尾前发送。
+	sFixed := skillSlotData{Key: "3", Strategy: 2, IntervalMS: 250, DelayMaxMS: 40, DelayMinMS: 40}
+	if got := slotExplanation(sFixed); got != "每 250ms 连点「3」，固定延迟 40ms" {
+		t.Errorf("固定延迟说明不符：%s", got)
+	}
+	sRange := skillSlotData{Key: "3", Strategy: 2, IntervalMS: 250, DelayMaxMS: 100, DelayMinMS: 2}
+	if got := slotExplanation(sRange); got != "每 250ms 连点「3」，延迟 2～100ms 随机" {
+		t.Errorf("延迟区间说明不符：%s", got)
+	}
+	sTail := skillSlotData{Key: "3", Strategy: 2, IntervalMS: 250, DelayMaxMS: -40, DelayMinMS: 40}
+	if got := slotExplanation(sTail); got != "每 250ms 连点「3」，固定延迟 40ms（周期末尾前发送）" {
+		t.Errorf("末尾前发送说明不符：%s", got)
 	}
 }
 
@@ -149,11 +157,12 @@ func TestSlotStrategySurvivesRoundTrip(t *testing.T) {
 }
 
 func TestSlotDelaySurvivesRoundTrip(t *testing.T) {
-	// 界面上只有一个「延迟」输入：填了幅度就必须同时写出 d 与 rd（随机波动），并能读回。
+	// 区间往返：上下界相同即固定延迟，此时不写 dn（配置保持简短）。
 	slots := defaultSlots()
 	slots[0].Strategy = strategySpam
 	slots[0].IntervalMS = 150
-	slots[0].DelayMS = -40
+	slots[0].DelayMaxMS = -40
+	slots[0].DelayMinMS = 40
 
 	prof := slotsToProfile(slots, "延迟往返", "", config.ModeConcurrent)
 	raw := config.Raw{Version: config.Version, Profiles: []config.RawProfile{prof}}
@@ -162,13 +171,25 @@ func TestSlotDelaySurvivesRoundTrip(t *testing.T) {
 		t.Fatalf("延迟配置应当合法：%v", err)
 	}
 	r := parsed.Profiles[0].Rules[0]
-	if r.DelayMS != -40 || !r.RandomDelay || r.Strategy != config.StrategySpam {
-		t.Fatalf("延迟写入协议有误（填了幅度必须带随机）：%+v", r)
+	if r.DelayMS != -40 || r.DelayMinMS != 0 || r.Strategy != config.StrategySpam {
+		t.Fatalf("固定延迟写入协议有误：%+v", r)
 	}
 
 	got := profileToSlots(prof)[0]
-	if got.DelayMS != -40 {
+	if got.DelayMaxMS != -40 || got.DelayMinMS != 40 {
 		t.Fatalf("延迟往返后丢失：%+v", got)
+	}
+
+	// 区间往返：上下界不同时写 dn。
+	slots[0].DelayMaxMS = 100
+	slots[0].DelayMinMS = 2
+	prof = slotsToProfile(slots, "区间往返", "", config.ModeConcurrent)
+	if _, err := config.Resolve(config.Raw{Version: config.Version, Profiles: []config.RawProfile{prof}}); err != nil {
+		t.Fatalf("延迟区间应当合法：%v", err)
+	}
+	got = profileToSlots(prof)[0]
+	if got.DelayMaxMS != 100 || got.DelayMinMS != 2 {
+		t.Fatalf("延迟区间往返后丢失：%+v", got)
 	}
 }
 
@@ -177,7 +198,8 @@ func TestSlotBuffDropsDelay(t *testing.T) {
 	slots := defaultSlots()
 	slots[1].Strategy = strategyBuff
 	slots[1].IntervalMS = 300
-	slots[1].DelayMS = 100
+	slots[1].DelayMaxMS = 100
+	slots[1].DelayMinMS = 100
 
 	prof := slotsToProfile(slots, "buff 干净字段", "", config.ModeConcurrent)
 	raw := config.Raw{Version: config.Version, Profiles: []config.RawProfile{prof}}
@@ -186,17 +208,18 @@ func TestSlotBuffDropsDelay(t *testing.T) {
 		t.Fatalf("保持Buff 配置应当合法（延迟须被裁剪）：%v", err)
 	}
 	r := parsed.Profiles[0].Rules[0]
-	if !r.Buff || r.DelayMS != 0 || r.RandomDelay {
+	if !r.Buff || r.DelayMS != 0 || r.DelayMinMS != 0 {
 		t.Fatalf("保持Buff 不应携带延迟：%+v", r)
 	}
 }
 
 func TestSlotNoDelayWritesNoRandom(t *testing.T) {
-	// 延迟留空（0）时既不该写 d，也不该写 rd（协议要求 rd 与 d 成对）。
+	// 延迟留空（0）时既不该写 d，也不该写 dn。
 	slots := defaultSlots()
 	slots[0].Strategy = strategySpam
 	slots[0].IntervalMS = 150
-	slots[0].DelayMS = 0
+	slots[0].DelayMaxMS = 0
+	slots[0].DelayMinMS = 0
 
 	prof := slotsToProfile(slots, "无延迟", "", config.ModeConcurrent)
 	raw := config.Raw{Version: config.Version, Profiles: []config.RawProfile{prof}}
@@ -204,8 +227,24 @@ func TestSlotNoDelayWritesNoRandom(t *testing.T) {
 	if err != nil {
 		t.Fatalf("无延迟配置应当合法：%v", err)
 	}
-	if r := parsed.Profiles[0].Rules[0]; r.DelayMS != 0 || r.RandomDelay {
-		t.Fatalf("无延迟时不应写出 d/rd：%+v", r)
+	if r := parsed.Profiles[0].Rules[0]; r.DelayMS != 0 || r.DelayMinMS != 0 {
+		t.Fatalf("无延迟时不应写出 d/dn：%+v", r)
+	}
+}
+
+// clampDelayMin 保证界面里把两个框填反也不会让整份配置保存失败。
+func TestClampDelayMin(t *testing.T) {
+	cases := []struct{ min, max, want int }{
+		{2, 40, 2},
+		{40, 2, 2},   // 反着填：夹到上界
+		{-5, 40, 5},  // 负数按幅度算
+		{0, 40, 0},   // 0 表示固定（等于上界）
+		{10, -40, 10}, // 末尾前发送同样按幅度比较
+	}
+	for _, c := range cases {
+		if got := clampDelayMin(c.min, c.max); got != c.want {
+			t.Errorf("clampDelayMin(%d, %d) = %d，期望 %d", c.min, c.max, got, c.want)
+		}
 	}
 }
 
@@ -263,7 +302,8 @@ func TestUIClampLimitsWithinProtocol(t *testing.T) {
 		slots := defaultSlots()
 		slots[0].Strategy = strategySpam
 		slots[0].IntervalMS = 20
-		slots[0].DelayMS = delay
+		slots[0].DelayMaxMS = delay
+		slots[0].DelayMinMS = absInt(delay)
 		prof := slotsToProfile(slots, "夹取上限", "", config.ModeConcurrent)
 		if _, err := config.Resolve(config.Raw{Version: config.Version, Profiles: []config.RawProfile{prof}}); err != nil {
 			t.Fatalf("延迟 %d 应当仍被协议接受：%v", delay, err)

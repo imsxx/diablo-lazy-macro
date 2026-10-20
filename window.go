@@ -128,9 +128,10 @@ type skillSlotData struct {
 	Key        string `json:"key"`
 	Strategy   int    `json:"strategy"`
 	IntervalMS int    `json:"intervalMS"`
-	// DelayMS 是延迟幅度：填了就在 0～|DelayMS| 之间随机波动（正数在本周期内后延、
-	// 负数推迟到周期末尾前），0 表示不延迟。界面不再单独暴露「延迟随机」开关。
-	DelayMS int `json:"delayMS"`
+	// 延迟区间：DelayMaxMS 是上界（正数在本周期内后延、负数推迟到周期末尾前，0 表示不延迟），
+	// DelayMinMS 是下界（非负，0 或有值；等于上界时即固定延迟）。界面用两个输入框表达。
+	DelayMaxMS int `json:"delayMaxMS"`
+	DelayMinMS int `json:"delayMinMS"`
 }
 
 func defaultSlots() [numSlots]skillSlotData {
@@ -153,7 +154,8 @@ type frontendSlot struct {
 	KeyLabel    string `json:"keyLabel"` // 界面显示名（中文），由 keyitems.go 统一给出
 	Strategy    int    `json:"strategy"`
 	IntervalMS  int    `json:"intervalMS"`
-	DelayMS     int    `json:"delayMS"`
+	DelayMaxMS  int    `json:"delayMaxMS"`
+	DelayMinMS  int    `json:"delayMinMS"`
 	Explanation string `json:"explanation"` // 一行说明：让玩家不在界面上猜「保持Buff」是什么意思
 }
 
@@ -549,7 +551,7 @@ func (w *mainWindow) initBindings() {
 		return nil
 	})
 
-	bind("api_updateSlot", func(tabIdx, slotIdx int, key string, strategy, interval, delay int) error {
+	bind("api_updateSlot", func(tabIdx, slotIdx int, key string, strategy, interval, delayMin, delayMax int) error {
 		if tabIdx < 0 || tabIdx >= w.profileCount || slotIdx < 0 || slotIdx >= numSlots {
 			return fmt.Errorf("槽位序号超出范围")
 		}
@@ -568,7 +570,8 @@ func (w *mainWindow) initBindings() {
 		slot.Key = key
 		slot.Strategy = strategy
 		slot.IntervalMS = clampInterval(interval, prev.IntervalMS)
-		slot.DelayMS = clampDelay(delay)
+		slot.DelayMaxMS = clampDelay(delayMax)
+		slot.DelayMinMS = clampDelayMin(delayMin, slot.DelayMaxMS)
 		return w.commitOrRollback(func() { *slot = prev })
 	})
 
@@ -933,7 +936,8 @@ func (w *mainWindow) buildFrontendState() *frontendState {
 				KeyLabel:    keyNameOfToken(sd.Key),
 				Strategy:    sd.Strategy,
 				IntervalMS:  sd.IntervalMS,
-				DelayMS:     sd.DelayMS,
+				DelayMaxMS:  sd.DelayMaxMS,
+				DelayMinMS:  sd.DelayMinMS,
 				Explanation: slotExplanation(sd),
 			}
 		}
@@ -1237,7 +1241,12 @@ func profileToSlots(prof config.RawProfile) [numSlots]skillSlotData {
 		if r.IntervalMS > 0 {
 			slots[slotIdx].IntervalMS = r.IntervalMS
 		}
-		slots[slotIdx].DelayMS = r.DelayMS
+		slots[slotIdx].DelayMaxMS = r.DelayMS
+		slots[slotIdx].DelayMinMS = r.DelayMinMS
+		if r.DelayMS != 0 && r.DelayMinMS == 0 {
+			// 协议里 dn 缺省表示固定延迟：界面两个框显示成同一个数，符合「只填一个，另一个自动补齐」。
+			slots[slotIdx].DelayMinMS = absInt(r.DelayMS)
+		}
 
 		switch {
 		case r.Strategy != config.StrategyDisabled:
@@ -1289,10 +1298,37 @@ func activeAfterDelete(active, idx int) int {
 	}
 }
 
-// absInt 取绝对值（仅用于文案里的延迟幅度）。
+// absInt 取绝对值（仅用于文案与区间换算）。
 func absInt(v int) int {
 	if v < 0 {
 		return -v
+	}
+	return v
+}
+
+// delayText 把延迟区间翻译成人话：固定 / 区间随机 / 周期末尾前发送。
+func delayText(s skillSlotData) string {
+	hi := absInt(s.DelayMaxMS)
+	suffix := ""
+	if s.DelayMaxMS < 0 {
+		suffix = "（周期末尾前发送）"
+	}
+	if s.DelayMinMS > 0 && s.DelayMinMS != hi {
+		return fmt.Sprintf("延迟 %d～%dms 随机%s", s.DelayMinMS, hi, suffix)
+	}
+	return fmt.Sprintf("固定延迟 %dms%s", hi, suffix)
+}
+
+// clampDelayMin 把延迟下界夹到 [0, |max|]：界面填反了也不会让整份配置保存失败。
+func clampDelayMin(v, max int) int {
+	if v < 0 {
+		v = -v
+	}
+	if max < 0 {
+		max = -max
+	}
+	if v > max {
+		return max
 	}
 	return v
 }
@@ -1348,10 +1384,12 @@ func slotsToProfile(slots [numSlots]skillSlotData, name string, switchKey string
 				IntervalMS: clampInterval(s.IntervalMS, 20),
 				Strategy:   config.StrategySpam,
 			}
-			if s.DelayMS != 0 {
-				rule.DelayMS = s.DelayMS
-				// 界面把「延迟」与「延迟随机」合并成一列：填了幅度就在 0～|幅度| 之间随机波动。
-				rule.RandomDelay = true
+			if s.DelayMaxMS != 0 {
+				rule.DelayMS = s.DelayMaxMS
+				// 上下界相等即固定延迟，此时不写 dn（保持配置简短）。
+				if s.DelayMinMS > 0 && s.DelayMinMS != absInt(s.DelayMaxMS) {
+					rule.DelayMinMS = s.DelayMinMS
+				}
 			}
 			rules = append(rules, rule)
 		case strategyBuff:
@@ -1381,8 +1419,8 @@ func slotExplanation(s skillSlotData) string {
 	case 1:
 		return fmt.Sprintf("持续保持按下「%s」（旋风斩/扫射/引导类技能专长）", keyText)
 	case 2:
-		if s.DelayMS != 0 {
-			return fmt.Sprintf("每 %dms 连点「%s」，延迟在最多 %dms 内随机波动", s.IntervalMS, keyText, absInt(s.DelayMS))
+		if s.DelayMaxMS != 0 {
+			return fmt.Sprintf("每 %dms 连点「%s」，%s", s.IntervalMS, keyText, delayText(s))
 		}
 		return fmt.Sprintf("每 %dms 持续连点「%s」", s.IntervalMS, keyText)
 	case 3:

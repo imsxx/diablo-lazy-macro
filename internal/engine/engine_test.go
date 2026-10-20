@@ -236,21 +236,27 @@ func TestTapNegativeDelayShiftsToCycleEnd(t *testing.T) {
 	expectEvents(t, sender, "tap:1")
 }
 
-func TestTapDelayBelowThresholdIgnored(t *testing.T) {
-	// |延迟| 未超过 20ms 阈值视为关闭：周期起点立即发送。
+func TestTapSmallDelayIsHonored(t *testing.T) {
+	// 不再有「20ms 以下视为关闭」的门槛：2ms 就是 2ms，实不实现在于系统与游戏。
 	e, sender, _, _ := newTestEngine(t, []config.ParsedRule{
-		{Kind: config.ActionTap, Keys: []uint16{0x31}, IntervalMS: 200, DelayMS: 20},
+		{Kind: config.ActionTap, Keys: []uint16{0x31}, IntervalMS: 200, DelayMS: 2},
 	})
 	e.SetEnabled(true)
 	e.Tick(base, true)
+	expectEvents(t, sender)
+	e.Tick(base.Add(time.Millisecond), true)
+	expectEvents(t, sender)
+	e.Tick(base.Add(2*time.Millisecond), true)
 	expectEvents(t, sender, "tap:1")
 }
 
-func TestTapRandomDelayUsesInjectedSource(t *testing.T) {
-	e, sender, _, _ := newTestEngine(t, []config.ParsedRule{
-		{Kind: config.ActionTap, Keys: []uint16{0x31}, IntervalMS: 500, DelayMS: 100, RandomDelay: true},
-	})
-	// 固定随机源取上界：mag = 10 + (100-10+1) - 1 = 100
+func TestTapDelayIntervalUsesInjectedSource(t *testing.T) {
+	rules := []config.ParsedRule{
+		{Kind: config.ActionTap, Keys: []uint16{0x31}, IntervalMS: 500, DelayMS: 100, DelayMinMS: 10},
+	}
+
+	// 注入上界：区间 [10, 100] 取到 100ms。
+	e, sender, _, _ := newTestEngine(t, rules)
 	e.randIntn = func(n int) int { return n - 1 }
 	e.SetEnabled(true)
 	e.Tick(base, true)
@@ -259,8 +265,48 @@ func TestTapRandomDelayUsesInjectedSource(t *testing.T) {
 	expectEvents(t, sender)
 	e.Tick(base.Add(100*time.Millisecond), true)
 	expectEvents(t, sender, "tap:1")
+
+	// 注入下界：同一区间取到 10ms。
+	e2, sender2, _, _ := newTestEngine(t, rules)
+	e2.randIntn = func(int) int { return 0 }
+	e2.SetEnabled(true)
+	e2.Tick(base, true)
+	e2.Tick(base.Add(9*time.Millisecond), true)
+	expectEvents(t, sender2)
+	e2.Tick(base.Add(10*time.Millisecond), true)
+	expectEvents(t, sender2, "tap:1")
 }
 
+
+// NextDue 是「事件驱动调度」的核心：主循环据此睡到到期时刻，而不是按固定周期轮询。
+func TestNextDueReportsEarliestDeadline(t *testing.T) {
+	e, _, _, _ := newTestEngine(t, []config.ParsedRule{
+		{Kind: config.ActionTap, Keys: []uint16{0x31}, IntervalMS: 250},
+	})
+	if got := e.NextDue(base); !got.IsZero() {
+		t.Fatalf("未启用时不应要求精确唤醒：%v", got)
+	}
+	e.SetEnabled(true)
+	e.Tick(base, true)
+	if got := e.NextDue(base); !got.Equal(base.Add(250 * time.Millisecond)) {
+		t.Fatalf("应返回下一次连点时刻（base+250ms），实际 %v", got)
+	}
+	// 已过期的时刻不该反复唤醒：调用方按检测周期轮询即可，避免 1ms 空转。
+	if got := e.NextDue(base.Add(time.Second)); !got.IsZero() {
+		t.Fatalf("过期时刻应返回零值，实际 %v", got)
+	}
+}
+
+func TestNextDueIncludesDelayOffset(t *testing.T) {
+	e, _, _, _ := newTestEngine(t, []config.ParsedRule{
+		{Kind: config.ActionTap, Keys: []uint16{0x31}, IntervalMS: 500, DelayMS: 40, DelayMinMS: 40},
+	})
+	e.SetEnabled(true)
+	e.Tick(base, true) // 激活并算出 fireAt = base + 40ms
+	if got := e.NextDue(base); !got.Equal(base.Add(40 * time.Millisecond)) {
+		t.Fatalf("延迟后的到期时刻不符：%v", got)
+	}
+}
 
 func TestBuffGuardOnlyAppliesToBuffRules(t *testing.T) {
 	// 普通连点规则（未声明保持Buff）不受 Buff 检测器影响。

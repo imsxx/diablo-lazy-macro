@@ -22,7 +22,7 @@ func TestFrontendStateJSONContract(t *testing.T) {
 		Name: "配置 1", HK: "F9", HKLabel: "F9", Mode: "con",
 		Slots: []frontendSlot{{
 			Name: "技能一：", Key: "1", KeyLabel: "1", Strategy: 2,
-			IntervalMS: 250, DelayMS: 0, Explanation: "每 250ms 持续连点「1」",
+			IntervalMS: 250, DelayMaxMS: 0, DelayMinMS: 0, Explanation: "每 250ms 持续连点「1」",
 		}},
 	}}
 	st.Helpers.Hotkey = "F5"
@@ -54,7 +54,7 @@ func TestFrontendStateJSONContract(t *testing.T) {
 		`"engine"`, `"configured"`, `"status"`, `"statusText"`, `"holdMode"`, `"foreground"`,
 		`"hud"`,
 		`"name"`, `"hk"`, `"hkLabel"`, `"mode"`, `"slots"`,
-		`"key"`, `"keyLabel"`, `"strategy"`, `"intervalMS"`, `"delayMS"`, `"explanation"`,
+		`"key"`, `"keyLabel"`, `"strategy"`, `"intervalMS"`, `"delayMaxMS"`, `"delayMinMS"`, `"explanation"`,
 	}
 	for _, key := range wanted {
 		if !strings.Contains(js, key) {

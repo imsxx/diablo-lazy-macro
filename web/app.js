@@ -278,9 +278,14 @@ function renderSlots() {
           ${slot.strategy === 2 || slot.strategy === 3 ? '' : 'disabled'}>
       </span>
       <span class="col-delay">
-        <input type="number" class="input-num md" data-slot="${idx}" data-field="delay"
-          value="${slot.delayMS || ''}" placeholder="0" min="-30000" max="30000"
-          title="延迟（毫秒）：填了就在该值范围内随机波动（实际取 10ms～|值|，≤20ms 视为不延迟）；正数在本周期内延后，负数推迟到周期末尾前；不填=不延迟。仅「连点」生效"
+        <input type="number" class="input-num xs" data-slot="${idx}" data-field="delayMin"
+          value="${slot.delayMinMS || ''}" placeholder="最小" min="0" max="30000"
+          title="最小延迟（毫秒）：与「最大延迟」组成随机区间；只填这个时，另一个会自动补成相同值（固定延迟）"
+          ${slot.strategy === 2 ? '' : 'disabled'}>
+        <span class="delay-sep">～</span>
+        <input type="number" class="input-num xs" data-slot="${idx}" data-field="delayMax"
+          value="${slot.delayMaxMS || ''}" placeholder="最大" min="-30000" max="30000"
+          title="最大延迟（毫秒）：正数在本周期内后延，负数推迟到周期末尾前；与「最小延迟」不同即区间随机"
           ${slot.strategy === 2 ? '' : 'disabled'}>
       </span>
     `;
@@ -489,7 +494,8 @@ function bindSlotsDelegation() {
     let key = slot.key;
     let strategy = slot.strategy;
     let interval = slot.intervalMS;
-    let delay = slot.delayMS;
+    let delayMin = slot.delayMinMS;
+    let delayMax = slot.delayMaxMS;
 
     switch (el.dataset.field) {
       case 'strategy':
@@ -498,18 +504,47 @@ function bindSlotsDelegation() {
       case 'interval':
         interval = parseInt(el.value, 10) || 0;
         break;
-      case 'delay':
-        delay = parseInt(el.value, 10) || 0;
+      case 'delayMin':
+      case 'delayMax': {
+        // 两项是同一个区间的两端：任何一端留空（0）时，自动补成另一端的值，即「固定延迟」。
+        // 失焦或回车都会触发 change，所以玩家只填一个也能得到想要的结果。
+        let min = Math.abs(parseInt(valueOfSlotField(slotIdx, 'delayMin'), 10) || 0);
+        let max = parseInt(valueOfSlotField(slotIdx, 'delayMax'), 10) || 0;
+        if (min === 0 && max !== 0) {
+          min = Math.abs(max);
+          setSlotField(slotIdx, 'delayMin', min);
+        } else if (max === 0 && min !== 0) {
+          max = min;
+          setSlotField(slotIdx, 'delayMax', max);
+        }
+        delayMin = min;
+        delayMax = max;
         break;
+      }
       default:
         return;
     }
-    await commitSlot(slotIdx, key, strategy, interval, delay);
+    await commitSlot(slotIdx, key, strategy, interval, delayMin, delayMax);
   });
 }
 
-async function commitSlot(slotIdx, key, strategy, interval, delay) {
-  const r = await callApi('api_updateSlot', currentTab, slotIdx, key, strategy, interval, delay);
+// valueOfSlotField / setSlotField 只操作当前槽位行的输入框，用于「另一项自动补齐」。
+function slotFieldEl(slotIdx, field) {
+  return document.querySelector('#slotList input[data-slot="' + slotIdx + '"][data-field="' + field + '"]');
+}
+
+function valueOfSlotField(slotIdx, field) {
+  const el = slotFieldEl(slotIdx, field);
+  return el ? el.value : '';
+}
+
+function setSlotField(slotIdx, field, value) {
+  const el = slotFieldEl(slotIdx, field);
+  if (el) el.value = value;
+}
+
+async function commitSlot(slotIdx, key, strategy, interval, delayMin, delayMax) {
+  const r = await callApi('api_updateSlot', currentTab, slotIdx, key, strategy, interval, delayMin, delayMax);
   if (!r.ok) {
     // 失败时把控件恢复成后端实际保存的值（可能是被夹取/拒绝后的结果）
     await reloadState();
@@ -819,7 +854,7 @@ async function applyCapturedKey(target, token, label) {
       const slot = slotAt(target.target.slotIdx);
       if (!slot) return;
       result = await callApi('api_updateSlot', currentTab, target.target.slotIdx, token,
-        slot.strategy, slot.intervalMS, slot.delayMS);
+        slot.strategy, slot.intervalMS, slot.delayMinMS, slot.delayMaxMS);
       break;
     }
     case 'toggle':

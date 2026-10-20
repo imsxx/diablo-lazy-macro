@@ -162,7 +162,7 @@ func TestLoadCorruptThenQuarantine(t *testing.T) {
 
 func TestSaveRejectsInvalid(t *testing.T) {
 	bad := Snapshot{Config: config.Raw{Version: 1, Profiles: []config.RawProfile{
-		{Rules: []config.RawRule{{Trigger: "t", Action: "tap:1", IntervalMS: 5}}},
+		{Rules: []config.RawRule{{Trigger: "t", Action: "tap:1", IntervalMS: 0}}},
 	}}}
 	if err := Save(t.TempDir(), ConfigFile("d4"), bad); err == nil {
 		t.Fatalf("非法配置应当拒绝保存")

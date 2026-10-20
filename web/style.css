@@ -370,8 +370,9 @@ body {
 .col-key { width: 76px; text-align: center; flex-shrink: 0; }
 .col-strategy { width: 122px; text-align: center; flex-shrink: 0; }
 .col-interval { width: 112px; text-align: center; flex-shrink: 0; }
-/* 延迟列已合并「±随机」：填了幅度即随机波动，所以给足输入宽度 */
+/* 延迟列用「最小～最大」两个紧凑输入表达区间 */
 .col-delay { width: 136px; text-align: center; flex-shrink: 0; }
+.delay-sep { color: var(--color-text-muted); font-size: 12px; margin: 0 2px; }
 
 /* 拟真机械键帽按钮 (直角硬朗键帽) */
 .keycap-btn {
