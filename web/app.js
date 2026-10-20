@@ -925,12 +925,21 @@ function openLog() {
   callApi('api_openLogWindow');
 }
 
+// 最小化 = 收起（隐藏到托盘）：宏继续跑，双击托盘图标恢复。
 function minimizeWindow() {
   callApi('api_minimize');
 }
 
-function closeWindow() {
-  callApi('api_close');
+// requestQuit 是「关闭」的唯一入口：✕ 按钮与 Alt+F4（由 Go 侧转进来）都走这里。
+// 先二次确认，取消就什么都不做，确认后才真正退出进程。
+async function requestQuit() {
+  const ok = await askConfirm(
+    '退出暗黑懒人宏？',
+    '退出后宏会立即停止，托盘图标也会消失。需要时重新打开程序即可。',
+    '退出'
+  );
+  if (!ok) return;
+  await callApi('api_quit');
 }
 
 // ---------------------------------------------------------------- 顶栏拖拽

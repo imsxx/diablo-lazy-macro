@@ -456,8 +456,8 @@ func (w *mainWindow) subclass() {
 	var oldWndProc uintptr
 	cb := windows.NewCallback(func(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 		if msg == WM_CLOSE && !w.quitting {
-			// 关闭 = 隐藏到托盘（宏继续运行），与右上角 ✕ 行为一致。
-			w.hideToTray()
+			// 关闭 = 退出（先让界面弹二次确认）；最小化才是隐藏到托盘。
+			w.requestQuit()
 			return 0
 		}
 		if msg == WM_MOUSEACTIVATE {
@@ -865,9 +865,14 @@ func (w *mainWindow) initBindings() {
 	})
 
 	bind("api_minimize", func() error {
-		if r, _, err := procShowWindow.Call(w.hwnd, uintptr(SW_MINIMIZE)); r == 0 {
-			return fmt.Errorf("最小化失败：%v", err)
-		}
+		// 最小化 = 收起（隐藏到托盘）。真正退出走 api_quit。
+		w.hideToTray()
+		return nil
+	})
+
+	bind("api_quit", func() error {
+		// 投递到主循环再退出：直接在这里销毁 WebView 会把当前回调的执行环境拆掉。
+		w.app.sync(func() { w.app.quitApp() })
 		return nil
 	})
 
@@ -878,9 +883,20 @@ func (w *mainWindow) initBindings() {
 		return nil
 	})
 
-	bind("api_close", func() error {
-		w.hideToTray()
-		return nil
+}
+
+// requestQuit 是「关闭」的唯一入口：先让界面弹二次确认，确认后由 api_quit 真正退出。
+// 界面还没显示出来时直接退出——Alt+F4 不能变成「没反应」。
+func (w *mainWindow) requestQuit() {
+	if w.quitting {
+		return
+	}
+	if w.wv == nil || !w.shown {
+		w.app.sync(func() { w.app.quitApp() })
+		return
+	}
+	w.wv.Dispatch(func() {
+		w.wv.Eval("if(window.requestQuit){window.requestQuit()}else{window.api_quit&&window.api_quit()}")
 	})
 }
 
