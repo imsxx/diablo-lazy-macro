@@ -81,6 +81,21 @@ func TestQuickPauseValidation(t *testing.T) {
 	if err := s.Validate(); err == nil {
 		t.Fatal("超出范围的暂停时长应当被拒绝")
 	}
+
+	// 「暂停且连点左键」+ 左键触发 会自我触发：注入的连点被触发检测看到，
+	// 每 50ms 重置一次暂停时长，暂停永远结束不了。
+	s.QuickPause = DefaultQuickPause()
+	s.QuickPause.Action = QuickPauseActionClickLeft
+	s.QuickPause.MouseKey = 1
+	if err := s.Validate(); err == nil {
+		t.Fatal("左键触发 + 连点左键应当被拒绝")
+	}
+
+	// 换成别的鼠标键就合法。
+	s.QuickPause.MouseKey = 3
+	if err := s.Validate(); err != nil {
+		t.Fatalf("连点左键 + 中键触发应当合法：%v", err)
+	}
 }
 
 func TestSettingsApplyDefaults(t *testing.T) {

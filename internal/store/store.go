@@ -279,6 +279,11 @@ func (q QuickPauseSettings) Validate() error {
 	if q.Action < QuickPauseActionPause || q.Action > QuickPauseActionClickLeft {
 		return fmt.Errorf("快速暂停的行为取值 %d 无效（1 暂停宏 / 2 暂停宏且连点左键）", q.Action)
 	}
+	// 「暂停且连点左键」时不能再用左键触发：注入的连点会被自己的触发检测看到，
+	// 于是每 50ms 重置一次暂停时长，暂停永远结束不了。
+	if q.Action == QuickPauseActionClickLeft && q.MouseKey == 1 {
+		return fmt.Errorf("「暂停且连点左键」不能用左键触发：连点会被当成触发，导致暂停无法结束，请换一个鼠标键")
+	}
 	if q.DelayMS != 0 && (q.DelayMS < QuickPauseMinDelayMS || q.DelayMS > QuickPauseMaxDelayMS) {
 		return fmt.Errorf("快速暂停时长必须在 %d–%d 毫秒之间，实际 %d", QuickPauseMinDelayMS, QuickPauseMaxDelayMS, q.DelayMS)
 	}
