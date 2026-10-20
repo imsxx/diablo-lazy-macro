@@ -119,6 +119,12 @@ func TestSlotExplanation(t *testing.T) {
 	if expSpam != "每 1ms 持续连点「3」" {
 		t.Errorf("连点 1ms 说明不符：%s", expSpam)
 	}
+
+	// 延迟与「±随机」已合并：填了幅度，说明里要直接讲清"随机波动"，而不是让玩家去猜。
+	sDelayed := skillSlotData{Key: "3", Strategy: 2, IntervalMS: 250, DelayMS: -40}
+	if got := slotExplanation(sDelayed); got != "每 250ms 连点「3」，延迟在最多 40ms 内随机波动" {
+		t.Errorf("带延迟的连点说明不符：%s", got)
+	}
 }
 
 func TestSlotStrategySurvivesRoundTrip(t *testing.T) {
@@ -143,12 +149,11 @@ func TestSlotStrategySurvivesRoundTrip(t *testing.T) {
 }
 
 func TestSlotDelaySurvivesRoundTrip(t *testing.T) {
-	// 连点的延迟与延迟随机必须完整写入配置并能读回。
+	// 界面上只有一个「延迟」输入：填了幅度就必须同时写出 d 与 rd（随机波动），并能读回。
 	slots := defaultSlots()
 	slots[0].Strategy = strategySpam
 	slots[0].IntervalMS = 150
 	slots[0].DelayMS = -40
-	slots[0].RandomDelay = true
 
 	prof := slotsToProfile(slots, "延迟往返", "", config.ModeConcurrent)
 	raw := config.Raw{Version: config.Version, Profiles: []config.RawProfile{prof}}
@@ -158,11 +163,11 @@ func TestSlotDelaySurvivesRoundTrip(t *testing.T) {
 	}
 	r := parsed.Profiles[0].Rules[0]
 	if r.DelayMS != -40 || !r.RandomDelay || r.Strategy != config.StrategySpam {
-		t.Fatalf("延迟写入协议有误：%+v", r)
+		t.Fatalf("延迟写入协议有误（填了幅度必须带随机）：%+v", r)
 	}
 
 	got := profileToSlots(prof)[0]
-	if got.DelayMS != -40 || !got.RandomDelay {
+	if got.DelayMS != -40 {
 		t.Fatalf("延迟往返后丢失：%+v", got)
 	}
 }
@@ -173,7 +178,6 @@ func TestSlotBuffDropsDelay(t *testing.T) {
 	slots[1].Strategy = strategyBuff
 	slots[1].IntervalMS = 300
 	slots[1].DelayMS = 100
-	slots[1].RandomDelay = true
 
 	prof := slotsToProfile(slots, "buff 干净字段", "", config.ModeConcurrent)
 	raw := config.Raw{Version: config.Version, Profiles: []config.RawProfile{prof}}
@@ -187,18 +191,21 @@ func TestSlotBuffDropsDelay(t *testing.T) {
 	}
 }
 
-func TestSlotRandomDelayRequiresDelay(t *testing.T) {
-	// 没有延迟时不应写出延迟随机（协议要求 rd 与 d 成对）。
+func TestSlotNoDelayWritesNoRandom(t *testing.T) {
+	// 延迟留空（0）时既不该写 d，也不该写 rd（协议要求 rd 与 d 成对）。
 	slots := defaultSlots()
 	slots[0].Strategy = strategySpam
 	slots[0].IntervalMS = 150
 	slots[0].DelayMS = 0
-	slots[0].RandomDelay = true
 
-	prof := slotsToProfile(slots, "无延迟随机", "", config.ModeConcurrent)
+	prof := slotsToProfile(slots, "无延迟", "", config.ModeConcurrent)
 	raw := config.Raw{Version: config.Version, Profiles: []config.RawProfile{prof}}
-	if _, err := config.Resolve(raw); err != nil {
-		t.Fatalf("无延迟时不应写出 rd：%v", err)
+	parsed, err := config.Resolve(raw)
+	if err != nil {
+		t.Fatalf("无延迟配置应当合法：%v", err)
+	}
+	if r := parsed.Profiles[0].Rules[0]; r.DelayMS != 0 || r.RandomDelay {
+		t.Fatalf("无延迟时不应写出 d/rd：%+v", r)
 	}
 }
 

@@ -123,13 +123,14 @@ const (
 )
 
 type skillSlotData struct {
-	Name        string `json:"name"`
-	DefaultKey  string `json:"defaultKey"`
-	Key         string `json:"key"`
-	Strategy    int    `json:"strategy"`
-	IntervalMS  int    `json:"intervalMS"`
-	DelayMS     int    `json:"delayMS"`
-	RandomDelay bool   `json:"randomDelay"`
+	Name       string `json:"name"`
+	DefaultKey string `json:"defaultKey"`
+	Key        string `json:"key"`
+	Strategy   int    `json:"strategy"`
+	IntervalMS int    `json:"intervalMS"`
+	// DelayMS 是延迟幅度：填了就在 0～|DelayMS| 之间随机波动（正数在本周期内后延、
+	// 负数推迟到周期末尾前），0 表示不延迟。界面不再单独暴露「延迟随机」开关。
+	DelayMS int `json:"delayMS"`
 }
 
 func defaultSlots() [numSlots]skillSlotData {
@@ -153,7 +154,6 @@ type frontendSlot struct {
 	Strategy    int    `json:"strategy"`
 	IntervalMS  int    `json:"intervalMS"`
 	DelayMS     int    `json:"delayMS"`
-	RandomDelay bool   `json:"randomDelay"`
 	Explanation string `json:"explanation"` // 一行说明：让玩家不在界面上猜「保持Buff」是什么意思
 }
 
@@ -549,7 +549,7 @@ func (w *mainWindow) initBindings() {
 		return nil
 	})
 
-	bind("api_updateSlot", func(tabIdx, slotIdx int, key string, strategy, interval, delay int, random bool) error {
+	bind("api_updateSlot", func(tabIdx, slotIdx int, key string, strategy, interval, delay int) error {
 		if tabIdx < 0 || tabIdx >= w.profileCount || slotIdx < 0 || slotIdx >= numSlots {
 			return fmt.Errorf("槽位序号超出范围")
 		}
@@ -569,7 +569,6 @@ func (w *mainWindow) initBindings() {
 		slot.Strategy = strategy
 		slot.IntervalMS = clampInterval(interval, prev.IntervalMS)
 		slot.DelayMS = clampDelay(delay)
-		slot.RandomDelay = random && slot.DelayMS != 0
 		return w.commitOrRollback(func() { *slot = prev })
 	})
 
@@ -935,7 +934,6 @@ func (w *mainWindow) buildFrontendState() *frontendState {
 				Strategy:    sd.Strategy,
 				IntervalMS:  sd.IntervalMS,
 				DelayMS:     sd.DelayMS,
-				RandomDelay: sd.RandomDelay,
 				Explanation: slotExplanation(sd),
 			}
 		}
@@ -1240,7 +1238,6 @@ func profileToSlots(prof config.RawProfile) [numSlots]skillSlotData {
 			slots[slotIdx].IntervalMS = r.IntervalMS
 		}
 		slots[slotIdx].DelayMS = r.DelayMS
-		slots[slotIdx].RandomDelay = r.RandomDelay
 
 		switch {
 		case r.Strategy != config.StrategyDisabled:
@@ -1290,6 +1287,14 @@ func activeAfterDelete(active, idx int) int {
 	default:
 		return active
 	}
+}
+
+// absInt 取绝对值（仅用于文案里的延迟幅度）。
+func absInt(v int) int {
+	if v < 0 {
+		return -v
+	}
+	return v
 }
 
 func clampInterval(v, fallback int) int {
@@ -1345,7 +1350,8 @@ func slotsToProfile(slots [numSlots]skillSlotData, name string, switchKey string
 			}
 			if s.DelayMS != 0 {
 				rule.DelayMS = s.DelayMS
-				rule.RandomDelay = s.RandomDelay
+				// 界面把「延迟」与「延迟随机」合并成一列：填了幅度就在 0～|幅度| 之间随机波动。
+				rule.RandomDelay = true
 			}
 			rules = append(rules, rule)
 		case strategyBuff:
@@ -1375,6 +1381,9 @@ func slotExplanation(s skillSlotData) string {
 	case 1:
 		return fmt.Sprintf("持续保持按下「%s」（旋风斩/扫射/引导类技能专长）", keyText)
 	case 2:
+		if s.DelayMS != 0 {
+			return fmt.Sprintf("每 %dms 连点「%s」，延迟在最多 %dms 内随机波动", s.IntervalMS, keyText, absInt(s.DelayMS))
+		}
 		return fmt.Sprintf("每 %dms 持续连点「%s」", s.IntervalMS, keyText)
 	case 3:
 		return fmt.Sprintf("智能屏幕找色保持「%s」Buff（发光环未结束绝不按键）", keyText)

@@ -366,12 +366,12 @@ body {
   white-space: nowrap;
 }
 
-.col-slot { width: 84px; text-align: right; padding-right: 10px; color: var(--color-text-sub); font-size: 13px; font-weight: 500; flex-shrink: 0; white-space: nowrap; }
+.col-slot { width: 88px; text-align: right; padding-right: 10px; color: var(--color-text-sub); font-size: 13px; font-weight: 500; flex-shrink: 0; white-space: nowrap; }
 .col-key { width: 76px; text-align: center; flex-shrink: 0; }
-.col-strategy { width: 118px; text-align: center; flex-shrink: 0; }
-.col-interval { width: 104px; text-align: center; flex-shrink: 0; }
-.col-delay { width: 90px; text-align: center; flex-shrink: 0; }
-.col-random { width: 72px; text-align: center; flex-shrink: 0; }
+.col-strategy { width: 122px; text-align: center; flex-shrink: 0; }
+.col-interval { width: 112px; text-align: center; flex-shrink: 0; }
+/* 延迟列已合并「±随机」：填了幅度即随机波动，所以给足输入宽度 */
+.col-delay { width: 136px; text-align: center; flex-shrink: 0; }
 
 /* 拟真机械键帽按钮 (直角硬朗键帽) */
 .keycap-btn {

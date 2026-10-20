@@ -278,15 +278,10 @@ function renderSlots() {
           ${slot.strategy === 2 || slot.strategy === 3 ? '' : 'disabled'}>
       </span>
       <span class="col-delay">
-        <input type="number" class="input-num xs" data-slot="${idx}" data-field="delay"
+        <input type="number" class="input-num md" data-slot="${idx}" data-field="delay"
           value="${slot.delayMS || ''}" placeholder="0" min="-30000" max="30000"
-          title="延迟（毫秒）：正数在本周期内延后，负数推迟到周期末尾前；仅「连点」生效"
+          title="延迟（毫秒）：填了就在该值范围内随机波动（实际取 10ms～|值|，≤20ms 视为不延迟）；正数在本周期内延后，负数推迟到周期末尾前；不填=不延迟。仅「连点」生效"
           ${slot.strategy === 2 ? '' : 'disabled'}>
-      </span>
-      <span class="col-random">
-        <input type="checkbox" data-slot="${idx}" data-field="random"
-          title="延迟随机：实际延迟取 0～|延迟| 之间的随机值"
-          ${slot.randomDelay ? 'checked' : ''} ${slot.strategy === 2 ? '' : 'disabled'}>
       </span>
     `;
     container.appendChild(row);
@@ -495,7 +490,6 @@ function bindSlotsDelegation() {
     let strategy = slot.strategy;
     let interval = slot.intervalMS;
     let delay = slot.delayMS;
-    let random = slot.randomDelay;
 
     switch (el.dataset.field) {
       case 'strategy':
@@ -507,18 +501,15 @@ function bindSlotsDelegation() {
       case 'delay':
         delay = parseInt(el.value, 10) || 0;
         break;
-      case 'random':
-        random = el.checked;
-        break;
       default:
         return;
     }
-    await commitSlot(slotIdx, key, strategy, interval, delay, random);
+    await commitSlot(slotIdx, key, strategy, interval, delay);
   });
 }
 
-async function commitSlot(slotIdx, key, strategy, interval, delay, random) {
-  const r = await callApi('api_updateSlot', currentTab, slotIdx, key, strategy, interval, delay, random);
+async function commitSlot(slotIdx, key, strategy, interval, delay) {
+  const r = await callApi('api_updateSlot', currentTab, slotIdx, key, strategy, interval, delay);
   if (!r.ok) {
     // 失败时把控件恢复成后端实际保存的值（可能是被夹取/拒绝后的结果）
     await reloadState();
@@ -828,7 +819,7 @@ async function applyCapturedKey(target, token, label) {
       const slot = slotAt(target.target.slotIdx);
       if (!slot) return;
       result = await callApi('api_updateSlot', currentTab, target.target.slotIdx, token,
-        slot.strategy, slot.intervalMS, slot.delayMS, slot.randomDelay);
+        slot.strategy, slot.intervalMS, slot.delayMS);
       break;
     }
     case 'toggle':
