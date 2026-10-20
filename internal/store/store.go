@@ -164,6 +164,8 @@ type FloatingHUDSettings struct {
 }
 
 // DefaultFloatingHUD 返回悬浮窗默认设置。
+// GameOnly 默认关闭：默认开启却「只在游戏前台才出现」，等于玩家第一次打开工具根本看不见它，
+// 会以为功能坏了。嫌占地方的人可以自己勾上「仅前台显示」。
 func DefaultFloatingHUD() FloatingHUDSettings {
 	return FloatingHUDSettings{
 		Enabled:  true,
@@ -171,7 +173,7 @@ func DefaultFloatingHUD() FloatingHUDSettings {
 		X:        80,
 		Y:        80,
 		Locked:   false,
-		GameOnly: true,
+		GameOnly: false,
 	}
 }
 

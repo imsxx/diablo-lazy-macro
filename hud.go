@@ -190,6 +190,13 @@ func newFloatingHUD(a *app) *floatingHUD {
 	h.initGDI()
 	h.syncConfig()
 	h.applySettings()
+	if h.hwnd == 0 {
+		a.log.Printf("[HUD] 悬浮指示器窗口创建失败，本次运行不可用")
+	} else {
+		cfg := a.settings.FloatingHUD
+		a.log.Printf("[HUD] 悬浮指示器已创建：位置 (%d,%d)，开关=%v，仅前台显示=%v",
+			cfg.X, cfg.Y, cfg.Enabled, cfg.GameOnly)
+	}
 	return h
 }
 
@@ -429,13 +436,16 @@ func (h *floatingHUD) applySettings() {
 
 	s := h.app.settings.FloatingHUD
 	w, height := h.dimensions()
+	// 窗口是以 WS_POPUP（不含 WS_VISIBLE）创建的，光靠 SetWindowPos 不会显示出来；
+	// 必须带 SWP_SHOWWINDOW，否则 visible 被标成 true、轮询再也不调 ShowWindow，玩家永远看不到它。
 	procSetWindowPos.Call(
 		h.hwnd,
 		^uintptr(0), // HWND_TOPMOST ((HWND)-1)
 		uintptr(s.X), uintptr(s.Y),
 		uintptr(w), uintptr(height),
-		uintptr(SWP_NOACTIVATE|SWP_FRAMECHANGED),
+		uintptr(SWP_NOACTIVATE|SWP_FRAMECHANGED|SWP_SHOWWINDOW),
 	)
+	procShowWindow.Call(h.hwnd, uintptr(SW_SHOWNOACTIVATE))
 	h.mu.Lock()
 	h.visible = true
 	h.mu.Unlock()
@@ -456,8 +466,12 @@ func (h *floatingHUD) resetPosition() {
 		0,
 		uintptr(80), uintptr(80),
 		uintptr(w), uintptr(height),
-		uintptr(SWP_NOACTIVATE|SWP_NOZORDER|SWP_FRAMECHANGED),
+		uintptr(SWP_NOACTIVATE|SWP_NOZORDER|SWP_FRAMECHANGED|SWP_SHOWWINDOW),
 	)
+	procShowWindow.Call(h.hwnd, uintptr(SW_SHOWNOACTIVATE))
+	h.mu.Lock()
+	h.visible = true
+	h.mu.Unlock()
 	procInvalidateRect.Call(h.hwnd, 0, 1)
 	_ = store.SaveSettings(h.app.dir, *h.app.settings)
 }
