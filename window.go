@@ -57,8 +57,8 @@ const (
 	// 窗口的基准尺寸（CSS 像素 / 96 DPI）。实际窗口按屏幕 DPI 等比放大，
 	// 这样 WebView2 的 CSS 视口恒等于基准尺寸，界面布局在 125%/150% 缩放下不会被裁切。
 	baseWinWidth = 1060
-	// 顶部多了一条全局设置通栏，主内容区需要有足够高度放下 6 行槽位表 + 本配置卡片。
-	baseWinHeight = 700
+	// 顶部依次是标题栏、全局设置通栏、游戏切换条，主内容区仍要放得下 6 行槽位表 + 本配置卡片。
+	baseWinHeight = 720
 
 	// 界面侧取值上限：必须与 internal/config 的协议约束保持一致（由 slots_test.go 守护）。
 	maxDelayMSUI   = 30000

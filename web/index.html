@@ -14,11 +14,6 @@
       <span class="brand-version" id="appVersion">v0.2.0</span>
     </div>
 
-    <div class="game-selector">
-      <button class="game-btn active" data-game="d4" onclick="switchGame('d4')">暗黑破坏神 4</button>
-      <button class="game-btn" data-game="d3" onclick="switchGame('d3')">暗黑破坏神 3</button>
-    </div>
-
     <div class="header-macro-toggle">
       <span class="header-macro-label">启停键：</span>
       <button class="keycap-btn highlight header-keycap" id="toggleKeyBtn"
@@ -120,6 +115,16 @@
       </span>
     </div>
   </section>
+
+  <!-- ===== 游戏切换：界面的「上下文」分隔线，下面是该游戏自己的配置与额外功能 ===== -->
+  <div class="game-bar">
+    <span class="game-bar-label">游戏</span>
+    <div class="game-selector">
+      <button class="game-btn active" data-game="d4" onclick="switchGame('d4')">暗黑破坏神 4</button>
+      <button class="game-btn" data-game="d3" onclick="switchGame('d3')">暗黑破坏神 3</button>
+    </div>
+    <span class="game-bar-hint">两款游戏各有一份独立配置，切换后下方整体跟着换</span>
+  </div>
 
   <!-- ===== 主体：左栏按键配置 / 右栏额外功能 ===== -->
   <main class="app-main">

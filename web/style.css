@@ -231,7 +231,7 @@ body {
 /* ================= 全局设置区（标题栏下方的通栏） ================= */
 /* 不随游戏、不随方案变化的功能统一放这里：启动方式、暂停/提示、快速暂停、悬浮窗显示方式 */
 .global-bar {
-  margin: 0 14px;
+  margin: 8px 14px;
   padding: 8px 12px;
   background: var(--bg-card);
   border: 1px solid var(--border-main);
@@ -269,6 +269,34 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+/* ================= 游戏切换条 ================= */
+/* 视觉动线：全局设置（上）→ 游戏上下文（这里）→ 该游戏的配置（下）。
+   所以游戏切换不能挤在标题栏里和全局按钮混排。 */
+.game-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 10px 14px 0;
+  padding: 6px 12px;
+  border-left: 2px solid var(--color-accent);
+  background: #14161c;
+  flex-shrink: 0;
+}
+
+.game-bar-label {
+  color: var(--color-accent);
+  font-size: 12px;
+  font-weight: bold;
+  flex-shrink: 0;
+}
+
+.game-bar-hint {
+  margin-left: auto;
+  color: var(--color-text-muted);
+  font-size: 11px;
+  white-space: nowrap;
 }
 
 /* 右栏占位：非暗黑3 时说明这里暂时没有额外功能 */
