@@ -375,6 +375,8 @@ function renderHelperSection() {
   const isD3 = state.currentGame === 'd3';
   const helperCard = $id('helperCard');
   if (helperCard) helperCard.style.display = isD3 ? 'flex' : 'none';
+  const helpCard = $id('helperHelpCard');
+  if (helpCard) helpCard.style.display = isD3 ? 'flex' : 'none';
   // 非暗黑3 时右栏留一张说明卡，而不是空一大块。
   const emptyCard = $id('extraEmpty');
   if (emptyCard) emptyCard.style.display = isD3 ? 'none' : 'flex';
