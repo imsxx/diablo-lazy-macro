@@ -548,6 +548,29 @@ func (w *mainWindow) initBindings() {
 		return nil
 	})
 
+	// api_moveSlot 把槽位沿顺序移动一格（delta：-1 上移 / +1 下移）。
+	// 循环模式的执行顺序就是槽位顺序，所以「先按 4 再按 3」只能靠排序解决。
+	bind("api_moveSlot", func(tabIdx, slotIdx, delta int) error {
+		if tabIdx < 0 || tabIdx >= w.profileCount {
+			return fmt.Errorf("方案序号 %d 超出范围", tabIdx)
+		}
+		if delta != -1 && delta != 1 {
+			return fmt.Errorf("移动方向 %d 无效（只支持 -1 / +1）", delta)
+		}
+		to, ok := slotMoveTarget(slotIdx, delta, numSlots)
+		if !ok {
+			return nil // 已在顶端/底端：按钮本身是禁用的，这里静默忽略
+		}
+		prev := w.profileSlots[tabIdx]
+		w.profileSlots[tabIdx][slotIdx], w.profileSlots[tabIdx][to] =
+			w.profileSlots[tabIdx][to], w.profileSlots[tabIdx][slotIdx]
+		if err := w.commitOrRollback(func() { w.profileSlots[tabIdx] = prev }); err != nil {
+			return err
+		}
+		w.app.log.Printf("[界面] 调整槽位顺序：第 %d 位 ↔ 第 %d 位", slotIdx+1, to+1)
+		return nil
+	})
+
 	bind("api_updateSlot", func(tabIdx, slotIdx int, key string, strategy, interval, delayMin, delayMax int) error {
 		if tabIdx < 0 || tabIdx >= w.profileCount || slotIdx < 0 || slotIdx >= numSlots {
 			return fmt.Errorf("槽位序号超出范围")
@@ -1292,6 +1315,15 @@ func activeAfterDelete(active, idx int) int {
 	default:
 		return active
 	}
+}
+
+// slotMoveTarget 返回移动后的目标下标；已在顶端/底端时 ok=false。
+func slotMoveTarget(idx, delta, total int) (int, bool) {
+	to := idx + delta
+	if idx < 0 || idx >= total || to < 0 || to >= total {
+		return 0, false
+	}
+	return to, true
 }
 
 // absInt 取绝对值（仅用于文案与区间换算）。

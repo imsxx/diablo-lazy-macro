@@ -466,7 +466,37 @@ body {
   white-space: nowrap;
 }
 
-.col-slot { width: 88px; text-align: right; padding-right: 10px; color: var(--color-text-sub); font-size: 13px; font-weight: 500; flex-shrink: 0; white-space: nowrap; }
+.col-slot { width: 88px; display: flex; align-items: center; justify-content: flex-end; gap: 2px; padding-right: 6px; color: var(--color-text-sub); font-size: 13px; font-weight: 500; flex-shrink: 0; white-space: nowrap; }
+/* 顺序列：↑ 序号 ↓ —— 循环模式按这个顺序执行 */
+.slot-move {
+  width: 16px;
+  height: 18px;
+  padding: 0;
+  background: #1a1c23;
+  border: 1px solid var(--border-main);
+  color: var(--color-text-sub);
+  font-size: 10px;
+  line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.slot-move:hover:not(:disabled) {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.slot-move:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.slot-no {
+  width: 16px;
+  text-align: center;
+  color: var(--color-text-sub);
+  font-size: 12px;
+}
 .col-key { width: 76px; text-align: center; flex-shrink: 0; }
 .col-strategy { width: 122px; text-align: center; flex-shrink: 0; }
 .col-interval { width: 112px; text-align: center; flex-shrink: 0; }

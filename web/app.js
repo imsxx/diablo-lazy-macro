@@ -272,7 +272,13 @@ function renderSlots() {
     const delayHint = useDelay ? '仅「连点」生效' : '当前策略是「' + strategyName + '」，改成「连点」后生效（可以先填）';
 
     row.innerHTML = `
-      <span class="col-slot">${esc(slot.name || '')}</span>
+      <span class="col-slot" title="第 ${idx + 1} 步${slot.keyLabel ? ' · ' + esc(slot.keyLabel) : ''}（循环模式按这个顺序执行）">
+        <button class="slot-move" data-move="-1" data-slot="${idx}" ${idx === 0 ? 'disabled' : ''}
+          title="上移一位">↑</button>
+        <span class="slot-no">${idx + 1}</span>
+        <button class="slot-move" data-move="1" data-slot="${idx}" ${idx === prof.slots.length - 1 ? 'disabled' : ''}
+          title="下移一位">↓</button>
+      </span>
       <span class="col-key">
         <button class="keycap-btn sm" data-slot="${idx}" data-field="key"
           title="当前：${esc(slot.keyLabel || '未选择')} · 点击后按任意键录入（Esc 取消）">${esc(slot.keyLabel || '—')}</button>
@@ -475,6 +481,13 @@ function bindSlotsDelegation() {
   if (!container) return;
 
   container.addEventListener('click', (e) => {
+    // 排序按钮先处理：它不属于任何输入控件，也不会触发键位录入。
+    const moveBtn = e.target.closest('button[data-move]');
+    if (moveBtn) {
+      if (moveBtn.disabled) return;
+      moveSlot(Number(moveBtn.dataset.slot), Number(moveBtn.dataset.move));
+      return;
+    }
     const btn = e.target.closest('button[data-field="key"]');
     if (!btn) return;
     openCapture('slot', { slotIdx: Number(btn.dataset.slot) });
@@ -537,6 +550,20 @@ function valueOfSlotField(slotIdx, field) {
 function setSlotField(slotIdx, field, value) {
   const el = slotFieldEl(slotIdx, field);
   if (el) el.value = value;
+}
+
+// moveSlot 把某一槽位上下移一格：顺序就是循环模式的执行顺序，
+// 换完顺序按后端回传的状态重绘（键位、策略、间隔跟着整行走）。
+async function moveSlot(slotIdx, delta) {
+  const r = await callApi('api_moveSlot', currentTab, slotIdx, delta);
+  if (!r.ok) {
+    await reloadState();
+    renderSlots();
+    return;
+  }
+  await reloadState();
+  renderSlots();
+  flashAutoSave();
 }
 
 async function commitSlot(slotIdx, key, strategy, interval, delayMin, delayMax) {
