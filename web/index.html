@@ -60,7 +60,7 @@
       <div class="form-item">
         <span class="form-label">模式：</span>
         <select class="select-dropdown md" id="profileModeSelect" onchange="saveProfileMode()"
-          title="按键模式：并发=各技能各自计时、到点就按；循环=按槽位顺序一轮一轮按。属于当前标签的配置，切换标签会跟着变">
+          title="并发按键 →：各步独立计时，到点就按；循环按键 ↓：按编号逐个执行，一轮走完再回头。属于当前标签的配置，切换标签会跟着变">
           <option value="con">并发按键</option>
           <option value="seq">循环按键</option>
         </select>
@@ -129,7 +129,8 @@
           </div>
 
           <div class="slot-header">
-            <span class="col-slot" title="顺序就是循环模式的执行顺序：用 ↑ ↓ 调整先按哪个键">顺序</span>
+            <span class="col-slot" id="slotOrderHeader"
+              title="↓ 逐个执行（一轮走完再回头）；→ 各自独立计时">顺序</span>
             <span class="col-key">快捷键</span>
             <span class="col-strategy" title="禁用=不自动触发；按住不放=持续按住；连点=按间隔重复；保持Buff=屏幕找色守卫（暗黑3）">释放策略</span>
             <span class="col-interval" title="连点与保持Buff 的触发周期（毫秒），最小 1ms">执行间隔 (ms)</span>
@@ -142,7 +143,7 @@
 
           <div class="card-hints">
             <div class="hint-line">快捷键按钮点击后按任意键即可录入（Esc 取消）；支持鼠标左/右/中键与侧键。</div>
-            <div class="hint-line">顺序：用 ↑ ↓ 调整「循环模式」的执行次序（比如先按 4 再按 3），不用回游戏里改键位。</div>
+            <div class="hint-line">编号就是执行顺序：想让 4 先按，就把它填在第 1 步。箭头 ↓ 表示逐个执行（一轮走完再回头），→ 表示各步独立计时。</div>
             <div class="hint-line">延迟：正数在周期内延后、负数推迟到周期末尾前；与策略无关的列淡化显示但仍可先填（策略为「禁用」的槽位不写入配置）。</div>
           </div>
         </div>

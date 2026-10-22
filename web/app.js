@@ -254,6 +254,17 @@ function renderSlots() {
   const prof = currentProfile();
   if (!prof || !prof.slots) return;
 
+  // 箭头表达执行方式：↓ 逐个执行（一轮走完再回头）、→ 各自独立计时。
+  const sequential = prof.mode === 'seq';
+  const arrow = sequential ? '↓' : '→';
+  const orderHeader = $id('slotOrderHeader');
+  if (orderHeader) {
+    orderHeader.textContent = (sequential ? '顺序 ' : '并发 ') + arrow;
+    orderHeader.title = sequential
+      ? '按编号逐个执行：第 1 步做完再做第 2 步，一轮走完从头再来'
+      : '各步相互独立、各自计时，编号只表示列表位置';
+  }
+
   prof.slots.forEach((slot, idx) => {
     const row = document.createElement('div');
     row.className = 'slot-row';
@@ -272,12 +283,9 @@ function renderSlots() {
     const delayHint = useDelay ? '仅「连点」生效' : '当前策略是「' + strategyName + '」，改成「连点」后生效（可以先填）';
 
     row.innerHTML = `
-      <span class="col-slot" title="第 ${idx + 1} 步${slot.keyLabel ? ' · ' + esc(slot.keyLabel) : ''}（循环模式按这个顺序执行）">
-        <button class="slot-move" data-move="-1" data-slot="${idx}" ${idx === 0 ? 'disabled' : ''}
-          title="上移一位">↑</button>
+      <span class="col-slot" title="第 ${idx + 1} 步${slot.keyLabel ? ' · ' + esc(slot.keyLabel) : ''}">
         <span class="slot-no">${idx + 1}</span>
-        <button class="slot-move" data-move="1" data-slot="${idx}" ${idx === prof.slots.length - 1 ? 'disabled' : ''}
-          title="下移一位">↓</button>
+        <span class="slot-arrow">${arrow}</span>
       </span>
       <span class="col-key">
         <button class="keycap-btn sm" data-slot="${idx}" data-field="key"
@@ -481,13 +489,6 @@ function bindSlotsDelegation() {
   if (!container) return;
 
   container.addEventListener('click', (e) => {
-    // 排序按钮先处理：它不属于任何输入控件，也不会触发键位录入。
-    const moveBtn = e.target.closest('button[data-move]');
-    if (moveBtn) {
-      if (moveBtn.disabled) return;
-      moveSlot(Number(moveBtn.dataset.slot), Number(moveBtn.dataset.move));
-      return;
-    }
     const btn = e.target.closest('button[data-field="key"]');
     if (!btn) return;
     openCapture('slot', { slotIdx: Number(btn.dataset.slot) });
@@ -550,20 +551,6 @@ function valueOfSlotField(slotIdx, field) {
 function setSlotField(slotIdx, field, value) {
   const el = slotFieldEl(slotIdx, field);
   if (el) el.value = value;
-}
-
-// moveSlot 把某一槽位上下移一格：顺序就是循环模式的执行顺序，
-// 换完顺序按后端回传的状态重绘（键位、策略、间隔跟着整行走）。
-async function moveSlot(slotIdx, delta) {
-  const r = await callApi('api_moveSlot', currentTab, slotIdx, delta);
-  if (!r.ok) {
-    await reloadState();
-    renderSlots();
-    return;
-  }
-  await reloadState();
-  renderSlots();
-  flashAutoSave();
 }
 
 async function commitSlot(slotIdx, key, strategy, interval, delayMin, delayMax) {

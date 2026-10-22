@@ -24,27 +24,6 @@ func TestDefaultConfigHasSingleProfile(t *testing.T) {
 	}
 }
 
-// 槽位排序的边界：顶端不能再上移、底端不能再下移，中间正常交换。
-func TestSlotMoveTarget(t *testing.T) {
-	cases := []struct {
-		idx, delta, want int
-		ok               bool
-	}{
-		{0, -1, 0, false},
-		{0, 1, 1, true},
-		{2, -1, 1, true},
-		{5, 1, 0, false},
-		{5, -1, 4, true},
-		{-1, 1, 0, false},
-	}
-	for _, c := range cases {
-		got, ok := slotMoveTarget(c.idx, c.delta, numSlots)
-		if ok != c.ok || (ok && got != c.want) {
-			t.Errorf("slotMoveTarget(%d, %d) = (%d, %v)，期望 (%d, %v)", c.idx, c.delta, got, ok, c.want, c.ok)
-		}
-	}
-}
-
 // 删除方案后的激活位：既不能越界，也不能让玩家「删了当前配置却还停在原序号」。
 func TestActiveAfterDelete(t *testing.T) {
 	cases := []struct{ active, idx, want int }{
