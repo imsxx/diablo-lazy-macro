@@ -345,6 +345,17 @@ function renderExtraSettings() {
   if (startSelect && state) startSelect.value = String(state.startMode || 0);
 }
 
+// HELPER_TIPS 是每个助手的悬停说明（对应 D3keyHelper 的 AddToolTip）：
+// 讲清「在哪个界面按、按了会做什么」，不满足条件时会直接报错，不会乱点。
+const HELPER_TIPS = {
+  'd3.gamble': '与赌徒对话并打开赌博界面后，按助手快捷键自动连点右键买装备（次数见右侧）。',
+  'd3.loot': '鼠标停在角色附近时连点左键捡起脚下物品；鼠标不在附近时只点一次，避免乱点。',
+  'd3.salvage.quick': '在铁匠铺「分解」页，鼠标指向背包里的装备时按助手快捷键：左键分解，弹确认框会自动回车。',
+  'd3.kanai.reforge': '在卡奈魔盒的「重铸」页，反复重铸鼠标放进去的那件装备，直到达到右侧目标品质（上限 30 次）。',
+  'd3.kanai.upgrade': '在卡奈魔盒的「升级稀有装备」页，把背包里的稀有装备逐个送进魔盒升级。',
+  'd3.kanai.convert': '在卡奈魔盒的「转化」页，把背包里的材料逐个送进魔盒转化。',
+};
+
 // HELPER_PARAMS 是「属于某个助手自己的参数」：紧跟在它的开关右侧，而不是堆在卡片顶部。
 // 只有这三个助手有参数，其余助手（分解、升级、转化）本身无参。
 const HELPER_PARAMS = {
@@ -375,8 +386,6 @@ function renderHelperSection() {
   const isD3 = state.currentGame === 'd3';
   const helperCard = $id('helperCard');
   if (helperCard) helperCard.style.display = isD3 ? 'flex' : 'none';
-  const helpCard = $id('helperHelpCard');
-  if (helpCard) helpCard.style.display = isD3 ? 'flex' : 'none';
   // 非暗黑3 时右栏留一张说明卡，而不是空一大块。
   const emptyCard = $id('extraEmpty');
   if (emptyCard) emptyCard.style.display = isD3 ? 'none' : 'flex';
@@ -400,9 +409,11 @@ function renderHelperSection() {
       const row = document.createElement('div');
       row.className = 'helper-item';
       row.dataset.helper = item.id;
+      row.title = HELPER_TIPS[item.id] || '';
 
       const label = document.createElement('label');
       label.className = 'checkbox-label helper-check-item';
+      label.title = HELPER_TIPS[item.id] || '';
       const box = document.createElement('input');
       box.type = 'checkbox';
       box.value = item.id;
