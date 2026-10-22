@@ -57,14 +57,6 @@
         </label>
         <button class="keycap-btn sm" id="forceStandKeyBtn" onclick="captureForceStandKey()">Shift</button>
       </div>
-      <div class="form-item">
-        <span class="form-label">模式：</span>
-        <select class="select-dropdown md" id="profileModeSelect" onchange="saveProfileMode()"
-          title="并发按键 →：各步独立计时，到点就按；循环按键 ↓：按编号逐个执行，一轮走完再回头。属于当前标签的配置，切换标签会跟着变">
-          <option value="con">并发按键</option>
-          <option value="seq">循环按键</option>
-        </select>
-      </div>
     </div>
 
     <!-- 第二行：悬浮窗显示方式 -->
@@ -124,6 +116,12 @@
             <span class="form-label">配置名：</span>
             <input type="text" class="input-text md" id="profileNameInput" onchange="saveProfileName()"
               maxlength="24" placeholder="配置 1" title="标签上显示的就是这个名字">
+            <span class="form-label">模式：</span>
+            <select class="select-dropdown md" id="profileModeSelect" onchange="saveProfileMode()"
+              title="并发按键 →：各步独立计时，到点就按；循环按键 ↓：按编号逐个执行，一轮走完再回头。只作用于当前配置">
+              <option value="con">并发按键</option>
+              <option value="seq">循环按键</option>
+            </select>
             <button class="tool-btn xs danger" id="deleteProfileBtn" onclick="deleteProfile()"
               title="删除当前配置（需二次确认）">删除</button>
           </div>

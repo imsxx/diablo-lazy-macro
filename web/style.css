@@ -628,6 +628,12 @@ body {
   min-width: 90px;
 }
 
+/* 模式与删除按钮固定宽度，把剩余空间让给配置名输入框 */
+.profile-meta .select-dropdown,
+.profile-meta .tool-btn {
+  flex-shrink: 0;
+}
+
 .form-item {
   display: flex;
   align-items: center;
