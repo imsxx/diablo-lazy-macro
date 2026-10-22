@@ -705,22 +705,52 @@ body {
 }
 
 #reforgeTargetSelect {
-  width: 125px;
+  width: 110px;
 }
 
+/* 助手列表：不再套一层带边框的内框，开关与它的参数并排一行（对齐 D3keyHelper） */
 .helper-checklist {
   display: flex;
   flex-direction: column;
-  gap: 5px;
-  background-color: #14161a;
-  padding: 8px 10px;
-  border: 1px solid var(--border-main);
+  gap: 2px;
+}
+
+.helper-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.helper-item .helper-check-item {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.helper-param {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.helper-param.disabled {
+  opacity: 0.45;
+}
+
+.helper-param-label {
+  color: var(--color-text-sub);
+  font-size: 11px;
+  white-space: nowrap;
 }
 
 .helper-check-item {
   font-size: 12px;
   color: var(--color-text);
   padding: 2px 0;
+  white-space: nowrap;
 }
 
 .helper-check-item:hover {

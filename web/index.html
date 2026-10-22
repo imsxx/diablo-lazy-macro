@@ -180,35 +180,9 @@
           </div>
         </div>
 
-        <div class="helper-controls">
-          <div class="form-item">
-            <span class="form-label">魔盒重铸目标：</span>
-            <select class="select-dropdown sm" id="reforgeTargetSelect" onchange="saveHelperSettings()"
-              title="重铸到该品质即停（上限 30 次）">
-              <option value="0">只重铸一次</option>
-              <option value="2">普通传奇</option>
-              <option value="3">远古传奇</option>
-              <option value="4">神圣装备</option>
-              <option value="5">太古传奇</option>
-            </select>
-          </div>
-        </div>
-
-        <div class="helper-controls">
-          <div class="form-item">
-            <span class="form-label">赌博次数：</span>
-            <input type="number" class="input-num xs" id="gambleTimesInput" onchange="saveHelperSettings()"
-              min="2" max="60" placeholder="15" title="血岩赌博助手连按右键的次数（2–60）">
-          </div>
-          <div class="form-item">
-            <span class="form-label">拾取次数：</span>
-            <input type="number" class="input-num xs" id="lootTimesInput" onchange="saveHelperSettings()"
-              min="2" max="99" placeholder="30" title="一键拾取连点左键的次数（2–99）">
-          </div>
-        </div>
-
+        <!-- 每个助手一行：开关在左，属于它的参数紧跟在右（对应 D3keyHelper 的排布） -->
         <div class="helper-checklist" id="helperChecklist">
-          <!-- 由 JS 渲染助手复选框 -->
+          <!-- 由 JS 渲染：复选框 + 该助手的参数 -->
         </div>
 
         <div class="helper-note">* 城镇助手要求游戏窗口化或无边框窗口化运行；默认全部关闭，仅在当前界面命中时才动作。</div>

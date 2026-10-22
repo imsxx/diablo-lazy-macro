@@ -9,6 +9,7 @@ package helper
 
 import (
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/imsxx/diablo-lazy-macro/internal/games"
@@ -128,9 +129,37 @@ func Register(h Helper) {
 	registry = append(registry, h)
 }
 
-// All 返回全部已注册的助手。
+// displayOrder 决定界面里助手的排列：与 D3keyHelper 的辅助功能面板一致，
+// 而不是按 Go 的 init 执行顺序（那个顺序取决于文件名，玩家看是没有逻辑的）。
+var displayOrder = []string{
+	"d3.gamble",
+	"d3.loot",
+	"d3.salvage.quick",
+	"d3.kanai.reforge",
+	"d3.kanai.upgrade",
+	"d3.kanai.convert",
+}
+
+// All 返回全部已注册的助手，按 displayOrder 排序；未列入的排在末尾。
 func All() []Helper {
-	return registry
+	rank := make(map[string]int, len(displayOrder))
+	for i, id := range displayOrder {
+		rank[id] = i
+	}
+	out := make([]Helper, len(registry))
+	copy(out, registry)
+	sort.SliceStable(out, func(i, j int) bool {
+		ri, okI := rank[out[i].ID()]
+		rj, okJ := rank[out[j].ID()]
+		if !okI {
+			ri = len(displayOrder)
+		}
+		if !okJ {
+			rj = len(displayOrder)
+		}
+		return ri < rj
+	})
+	return out
 }
 
 // AbortError 表示运行被用户中断。

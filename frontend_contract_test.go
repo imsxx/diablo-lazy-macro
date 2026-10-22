@@ -121,11 +121,25 @@ func TestFrontendInterfaceContract(t *testing.T) {
 		t.Error("web/index.html 又硬编码了方案标签：标签应由 renderTabs 按 profileNames 渲染")
 	}
 
-	// 4) 前端取用的元素 id 必须在 HTML 里存在
-	for _, m := range regexp.MustCompile(`\$id\('([A-Za-z0-9_]+)'\)`).FindAllStringSubmatch(appJS, -1) {
-		if !strings.Contains(indexHTML, `id="`+m[1]+`"`) {
-			t.Errorf("web/index.html 缺少元素 id=%s", m[1])
+	// 4) 前端取用的元素 id 必须在 HTML 里存在（或由 JS 按 HELPER_PARAMS 动态创建）。
+	//    助手列表是按 allHelpers 动态渲染的，每个助手自己的参数（次数/重铸目标）跟着行一起生成，
+	//    因此这三个 id 不在静态 HTML 里，但必须在 HELPER_PARAMS 中有定义，否则运行时会取到 null。
+	dynamicIDs := map[string]bool{
+		"gambleTimesInput":   true,
+		"lootTimesInput":     true,
+		"reforgeTargetSelect": true,
+	}
+	for id := range dynamicIDs {
+		if !strings.Contains(appJS, "id: '"+id+"'") {
+			t.Errorf("动态控件 %s 没有在 HELPER_PARAMS 里定义", id)
 		}
+	}
+	for _, m := range regexp.MustCompile(`\$id\('([A-Za-z0-9_]+)'\)`).FindAllStringSubmatch(appJS, -1) {
+		id := m[1]
+		if dynamicIDs[id] || strings.Contains(indexHTML, `id="`+id+`"`) {
+			continue
+		}
+		t.Errorf("web/index.html 缺少元素 id=%s", id)
 	}
 
 	// 4) HTML 里内联调用的函数必须在 JS 中定义

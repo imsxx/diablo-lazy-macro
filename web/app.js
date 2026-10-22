@@ -345,6 +345,31 @@ function renderExtraSettings() {
   if (startSelect && state) startSelect.value = String(state.startMode || 0);
 }
 
+// HELPER_PARAMS 是「属于某个助手自己的参数」：紧跟在它的开关右侧，而不是堆在卡片顶部。
+// 只有这三个助手有参数，其余助手（分解、升级、转化）本身无参。
+const HELPER_PARAMS = {
+  'd3.gamble': {
+    label: '发送右键次数', id: 'gambleTimesInput', type: 'number', min: 2, max: 60,
+    title: '赌博时连按右键的次数（2–60）',
+  },
+  'd3.loot': {
+    label: '发送左键次数', id: 'lootTimesInput', type: 'number', min: 2, max: 99,
+    title: '拾取时连点左键的次数（2–99）',
+  },
+  'd3.kanai.reforge': {
+    label: '目标', id: 'reforgeTargetSelect', type: 'select',
+    title: '重铸到该品质即停（上限 30 次）',
+    options: [['0', '只重铸一次'], ['2', '普通传奇'], ['3', '远古传奇'], ['4', '神圣装备'], ['5', '太古传奇']],
+  },
+};
+
+// helperParamValue 给出参数控件的当前值（后端没下发时用默认值）。
+function helperParamValue(id, h) {
+  if (id === 'gambleTimesInput') return h.gambleTimes || 15;
+  if (id === 'lootTimesInput') return h.lootTimes || 30;
+  return h.reforgeTarget || 0;
+}
+
 function renderHelperSection() {
   if (!state) return;
   const isD3 = state.currentGame === 'd3';
@@ -358,29 +383,86 @@ function renderHelperSection() {
   const h = state.helpers || {};
   const hotkeyBtn = $id('helperHotkeyBtn');
   if (hotkeyBtn) hotkeyBtn.textContent = h.hotkeyLabel || '无';
-
   setValueIfIdle($id('helperSpeedSelect'), String(h.delayMS || 150));
-  setValueIfIdle($id('reforgeTargetSelect'), String(h.reforgeTarget || 0));
-  setValueIfIdle($id('gambleTimesInput'), String(h.gambleTimes || 15));
-  setValueIfIdle($id('lootTimesInput'), String(h.lootTimes || 30));
-
 
   const checklist = $id('helperChecklist');
   if (!checklist) return;
-  checklist.innerHTML = '';
+  const list = state.allHelpers || [];
   const enabledMap = h.enabled || {};
-  (state.allHelpers || []).forEach((item) => {
-    const label = document.createElement('label');
-    label.className = 'checkbox-label helper-check-item';
-    const box = document.createElement('input');
-    box.type = 'checkbox';
-    box.value = item.id;
-    box.checked = !!enabledMap[item.id];
-    const text = document.createElement('span');
-    text.textContent = item.name;
-    label.appendChild(box);
-    label.appendChild(text);
-    checklist.appendChild(label);
+
+  // 助手种类不变时只更新值，不重建 DOM——否则正在输入的次数会被打断。
+  const sig = list.map((item) => item.id).join('|');
+  if (checklist.dataset.sig !== sig) {
+    checklist.innerHTML = '';
+    list.forEach((item) => {
+      const row = document.createElement('div');
+      row.className = 'helper-item';
+      row.dataset.helper = item.id;
+
+      const label = document.createElement('label');
+      label.className = 'checkbox-label helper-check-item';
+      const box = document.createElement('input');
+      box.type = 'checkbox';
+      box.value = item.id;
+      const text = document.createElement('span');
+      text.textContent = item.name;
+      label.appendChild(box);
+      label.appendChild(text);
+      row.appendChild(label);
+
+      const p = HELPER_PARAMS[item.id];
+      if (p) {
+        const wrap = document.createElement('span');
+        wrap.className = 'helper-param';
+        const plabel = document.createElement('span');
+        plabel.className = 'helper-param-label';
+        plabel.textContent = p.label;
+        wrap.appendChild(plabel);
+
+        let el;
+        if (p.type === 'select') {
+          el = document.createElement('select');
+          el.className = 'select-dropdown sm';
+          p.options.forEach(([value, labelText]) => {
+            const opt = document.createElement('option');
+            opt.value = value;
+            opt.textContent = labelText;
+            el.appendChild(opt);
+          });
+        } else {
+          el = document.createElement('input');
+          el.type = 'number';
+          el.className = 'input-num xs';
+          el.min = String(p.min);
+          el.max = String(p.max);
+        }
+        el.id = p.id;
+        el.title = p.title;
+        el.addEventListener('change', saveHelperSettings);
+        wrap.appendChild(el);
+        row.appendChild(wrap);
+      }
+      checklist.appendChild(row);
+    });
+    checklist.dataset.sig = sig;
+  }
+
+  list.forEach((item) => {
+    const row = checklist.querySelector('[data-helper="' + item.id + '"]');
+    if (!row) return;
+    const box = row.querySelector('input[type="checkbox"]');
+    const on = !!enabledMap[item.id];
+    if (box) box.checked = on;
+
+    const p = HELPER_PARAMS[item.id];
+    if (!p) return;
+    const wrap = row.querySelector('.helper-param');
+    const el = $id(p.id);
+    if (el) {
+      setValueIfIdle(el, String(helperParamValue(p.id, h)));
+      el.disabled = !on; // 与 D3keyHelper 一致：没勾选的助手，它的参数是灰的、不可改
+    }
+    if (wrap) wrap.classList.toggle('disabled', !on);
   });
 }
 
@@ -652,12 +734,19 @@ async function saveStartMode() {
   flashAutoSave();
 }
 
+// readNum 读取数字输入框；元素不存在（未渲染助手列表）时返回回退值。
+function readNum(id, fallback) {
+  const el = $id(id);
+  if (!el) return fallback;
+  return parseInt(el.value, 10) || 0;
+}
+
 async function saveHelperSettings() {
   const hotkey = (state && state.helpers && state.helpers.hotkey) || '';
   const speed = parseInt($id('helperSpeedSelect').value, 10) || 0;
   const target = parseInt($id('reforgeTargetSelect').value, 10) || 0;
-  const gamble = parseInt($id('gambleTimesInput').value, 10) || 0;
-  const loot = parseInt($id('lootTimesInput').value, 10) || 0;
+  const gamble = readNum('gambleTimesInput', 0);
+  const loot = readNum('lootTimesInput', 0);
   // 详细日志是「日志」的开关，不属于辅助功能：它的界面在运行日志浮层里。
   const dev = !!(state && state.helpers && state.helpers.devMode);
   const enabled = [];
@@ -881,10 +970,10 @@ async function applyCapturedKey(target, token, label) {
         enabled.push(cb.value);
       });
       result = await callApi('api_updateHelpers', token,
-        parseInt($id('helperSpeedSelect').value, 10) || 0,
-        parseInt($id('reforgeTargetSelect').value, 10) || 0,
-        parseInt($id('gambleTimesInput').value, 10) || 0,
-        parseInt($id('lootTimesInput').value, 10) || 0,
+        readNum('helperSpeedSelect', 0),
+        readNum('reforgeTargetSelect', 0),
+        readNum('gambleTimesInput', 0),
+        readNum('lootTimesInput', 0),
         !!(state && state.helpers && state.helpers.devMode), enabled);
       break;
     }
