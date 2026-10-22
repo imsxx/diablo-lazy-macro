@@ -361,6 +361,8 @@ function renderHelperSection() {
 
   setValueIfIdle($id('helperSpeedSelect'), String(h.delayMS || 150));
   setValueIfIdle($id('reforgeTargetSelect'), String(h.reforgeTarget || 0));
+  setValueIfIdle($id('gambleTimesInput'), String(h.gambleTimes || 15));
+  setValueIfIdle($id('lootTimesInput'), String(h.lootTimes || 30));
 
 
   const checklist = $id('helperChecklist');
@@ -654,6 +656,8 @@ async function saveHelperSettings() {
   const hotkey = (state && state.helpers && state.helpers.hotkey) || '';
   const speed = parseInt($id('helperSpeedSelect').value, 10) || 0;
   const target = parseInt($id('reforgeTargetSelect').value, 10) || 0;
+  const gamble = parseInt($id('gambleTimesInput').value, 10) || 0;
+  const loot = parseInt($id('lootTimesInput').value, 10) || 0;
   // 详细日志是「日志」的开关，不属于辅助功能：它的界面在运行日志浮层里。
   const dev = !!(state && state.helpers && state.helpers.devMode);
   const enabled = [];
@@ -661,7 +665,7 @@ async function saveHelperSettings() {
     enabled.push(cb.value);
   });
 
-  const r = await callApi('api_updateHelpers', hotkey, speed, target, dev, enabled);
+  const r = await callApi('api_updateHelpers', hotkey, speed, target, gamble, loot, dev, enabled);
   if (!r.ok) {
     await reloadState();
     renderHelperSection();
@@ -879,6 +883,8 @@ async function applyCapturedKey(target, token, label) {
       result = await callApi('api_updateHelpers', token,
         parseInt($id('helperSpeedSelect').value, 10) || 0,
         parseInt($id('reforgeTargetSelect').value, 10) || 0,
+        parseInt($id('gambleTimesInput').value, 10) || 0,
+        parseInt($id('lootTimesInput').value, 10) || 0,
         !!(state && state.helpers && state.helpers.devMode), enabled);
       break;
     }

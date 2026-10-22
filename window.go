@@ -203,6 +203,8 @@ type frontendState struct {
 		HotkeyLabel   string          `json:"hotkeyLabel"`
 		DelayMS       int             `json:"delayMS"`
 		ReforgeTarget int             `json:"reforgeTarget"`
+		GambleTimes   int             `json:"gambleTimes"`
+		LootTimes     int             `json:"lootTimes"`
 		DevMode       bool            `json:"devMode"`
 		Enabled       map[string]bool `json:"enabled"`
 	} `json:"helpers"`
@@ -702,12 +704,14 @@ func (w *mainWindow) initBindings() {
 		return nil
 	})
 
-	bind("api_updateHelpers", func(hotkey string, speedMS, reforgeTarget int, devMode bool, enabled []string) error {
+	bind("api_updateHelpers", func(hotkey string, speedMS, reforgeTarget, gambleTimes, lootTimes int, devMode bool, enabled []string) error {
 		hs := w.app.settings.Helpers
 		hotkey = strings.ToUpper(strings.TrimSpace(hotkey))
 		hs.Hotkey = hotkey
 		hs.DelayMS = clampInt(speedMS, store.HelperMinDelayMS, store.HelperMaxDelayMS, store.DefaultHelperDelayMS)
 		hs.ReforgeTarget = clampInt(reforgeTarget, 0, 5, 0)
+		hs.GambleTimes = clampInt(gambleTimes, store.MinHelperTimes, store.MaxGambleTimes, store.DefaultGambleTimes)
+		hs.LootTimes = clampInt(lootTimes, store.MinHelperTimes, store.MaxLootTimes, store.DefaultLootTimes)
 		hs.DevMode = devMode
 		hs.Enabled = map[string]bool{}
 		known := knownHelperIDs()
@@ -972,6 +976,8 @@ func (w *mainWindow) buildFrontendState() *frontendState {
 	s.Helpers.HotkeyLabel = keyNameOfToken(hs.Hotkey)
 	s.Helpers.DelayMS = hs.DelayMS
 	s.Helpers.ReforgeTarget = hs.ReforgeTarget
+	s.Helpers.GambleTimes = hs.GambleTimes
+	s.Helpers.LootTimes = hs.LootTimes
 	s.Helpers.DevMode = hs.DevMode
 	if hs.Enabled == nil {
 		s.Helpers.Enabled = make(map[string]bool)

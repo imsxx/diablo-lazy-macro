@@ -52,6 +52,41 @@ func TestGameKeysRejectsUnknownGame(t *testing.T) {
 	}
 }
 
+// 助手次数：默认对齐 D3keyHelper（15 / 30），范围照它的上下限（2–60 / 2–99）。
+func TestHelperTimesValidation(t *testing.T) {
+	s := DefaultSettings()
+	if err := s.Validate(); err != nil {
+		t.Fatalf("默认助手设置应当合法：%v", err)
+	}
+	if s.Helpers.GambleTimes != DefaultGambleTimes || s.Helpers.LootTimes != DefaultLootTimes {
+		t.Fatalf("默认次数未填：%+v", s.Helpers)
+	}
+
+	bad := []struct {
+		name  string
+		apply func(*Settings)
+	}{
+		{"赌博次数过小", func(s *Settings) { s.Helpers.GambleTimes = 1 }},
+		{"赌博次数过大", func(s *Settings) { s.Helpers.GambleTimes = 61 }},
+		{"拾取次数过小", func(s *Settings) { s.Helpers.LootTimes = 1 }},
+		{"拾取次数过大", func(s *Settings) { s.Helpers.LootTimes = 100 }},
+	}
+	for _, c := range bad {
+		s := DefaultSettings()
+		c.apply(s)
+		if err := s.Validate(); err == nil {
+			t.Errorf("%s：应当被拒绝", c.name)
+		}
+	}
+
+	s = DefaultSettings()
+	s.Helpers.GambleTimes = 60
+	s.Helpers.LootTimes = 99
+	if err := s.Validate(); err != nil {
+		t.Fatalf("边界值应当合法：%v", err)
+	}
+}
+
 func TestSettingsApplyDefaults(t *testing.T) {
 	// 旧存档缺少新增字段，解析后是零值：必须先补齐默认值，否则校验必然失败。
 	var s Settings

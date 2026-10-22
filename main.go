@@ -845,15 +845,17 @@ func (a *app) startHelper(snap runtimeSnapshot) {
 func pickHelper(env *helper.Env, settings store.HelperSettings) (helper.Helper, error) {
 	at := env.Sampler()
 	if settings.IsEnabled("d3.gamble") && games.D3GambleOpen(at) {
-		return helper.D3Gamble{}, nil
+		return helper.D3Gamble{Times: settings.GambleTimes}, nil
 	}
 	kanai := games.D3KanaiCubeOpen(env.Lang, at)
 	if settings.IsEnabled("d3.kanai.reforge") && kanai == games.D3KanaiReforge {
 		return helper.D3Reforge{Target: settings.ReforgeTarget}, nil
 	}
-	if settings.IsEnabled("d3.kanai.upgrade_convert") &&
-		(kanai == games.D3KanaiUpgrade || kanai == games.D3KanaiConvert) {
-		return helper.D3KanaiUpgradeConvert{}, nil
+	if settings.IsEnabled("d3.kanai.upgrade") && kanai == games.D3KanaiUpgrade {
+		return helper.D3KanaiUpgrade{}, nil
+	}
+	if settings.IsEnabled("d3.kanai.convert") && kanai == games.D3KanaiConvert {
+		return helper.D3KanaiConvert{}, nil
 	}
 	if settings.IsEnabled("d3.salvage.quick") {
 		if state, _ := games.D3SalvagePageOpen(at); state == games.D3SalvageReady {
@@ -862,7 +864,7 @@ func pickHelper(env *helper.Env, settings store.HelperSettings) (helper.Helper, 
 	}
 	// 拾取没有界面条件，放在最后兜底。
 	if settings.IsEnabled("d3.loot") {
-		return helper.D3Loot{}, nil
+		return helper.D3Loot{Times: settings.LootTimes}, nil
 	}
 	return nil, fmt.Errorf("当前界面没有可用的助手：请打开赌博界面、铁匠铺分解页或卡奈魔盒重铸页；" +
 		"若只想拾取，请启用「一键拾取」")

@@ -7,28 +7,41 @@ import (
 	"github.com/imsxx/diablo-lazy-macro/internal/keys"
 )
 
-func init() { Register(D3KanaiUpgradeConvert{}) }
+func init() {
+	Register(D3KanaiUpgrade{})
+	Register(D3KanaiConvert{})
+}
 
 // d3BagSlotCount 是背包格子总数（10 列 x 6 行）。
 const d3BagSlotCount = 60
 
-// D3KanaiUpgradeConvert 是卡奈魔盒的「升级稀有装备 / 转化材料」助手
-//（对应 D3keyHelper 的 oneButtonUpgradeConvertHelper）：把背包里的装备逐个送进魔盒执行一次转化。
-//
-// 与脚本的差异：脚本另起线程扫描哪些格子有装备（scanInventorySpaceGDIP）以跳过空格。
-// 这里先按「遍历全部 60 格」实现——对空格执行同样动作在游戏里是无操作，功能上等价，
-// 只是更慢；格子扫描留作后续加速优化（也顺带避免了那套多点聚合取色的移植成本）。
-type D3KanaiUpgradeConvert struct{}
+// D3KanaiUpgrade / D3KanaiConvert 对应 D3keyHelper 的两个独立开关
+//（extraUpgradeHelperCkbox / extraConvertHelperCkbox）：界面分开勾选，
+// 底层共用同一套「把背包逐个送进魔盒」的流程，靠魔盒当前页面区分。
+type D3KanaiUpgrade struct{}
 
-func (D3KanaiUpgradeConvert) ID() string { return "d3.kanai.upgrade_convert" }
-func (D3KanaiUpgradeConvert) Name() string {
-	return "卡奈魔盒 · 升级/转化"
+func (D3KanaiUpgrade) ID() string   { return "d3.kanai.upgrade" }
+func (D3KanaiUpgrade) Name() string { return "卡奈魔盒 · 升级稀有装备" }
+
+func (D3KanaiUpgrade) Run(env *Env) error {
+	return runKanaiBatch(env, games.D3KanaiUpgrade, "升级")
 }
 
-func (D3KanaiUpgradeConvert) Run(env *Env) error {
+type D3KanaiConvert struct{}
+
+func (D3KanaiConvert) ID() string   { return "d3.kanai.convert" }
+func (D3KanaiConvert) Name() string { return "卡奈魔盒 · 转化材料" }
+
+func (D3KanaiConvert) Run(env *Env) error {
+	return runKanaiBatch(env, games.D3KanaiConvert, "材料转化")
+}
+
+// runKanaiBatch 是升级/转化共用的批处理：把背包里的装备逐个送进魔盒执行一次。
+// 与 D3keyHelper 的 oneButtonUpgradeConvertHelper 等价。
+func runKanaiBatch(env *Env, want games.D3KanaiState, label string) error {
 	state := games.D3KanaiCubeOpen(env.Lang, env.Sampler())
-	if state != games.D3KanaiUpgrade && state != games.D3KanaiConvert {
-		return fmt.Errorf("不在卡奈魔盒的升级或材料转化界面：请先打开魔盒并切到对应页面")
+	if state != want {
+		return fmt.Errorf("不在卡奈魔盒的%s界面：请先打开魔盒并切到对应页面", label)
 	}
 	buttons, ok := games.D3KanaiButtonXY(env.WinH)
 	if !ok {
@@ -43,7 +56,7 @@ func (D3KanaiUpgradeConvert) Run(env *Env) error {
 
 	for id := 1; id <= d3BagSlotCount; id++ {
 		if env.aborted() {
-			return AbortError{Helper: "升级/转化"}
+			return AbortError{Helper: label}
 		}
 		slot, ok := games.D3InventorySlotXY(id, games.D3GridBag, env.WinW, env.WinH)
 		if !ok {
@@ -70,6 +83,6 @@ func (D3KanaiUpgradeConvert) Run(env *Env) error {
 		}
 		env.debugf("已处理第 %d 格", id)
 	}
-	env.logf("升级/转化完成：已遍历背包 %d 格", d3BagSlotCount)
+	env.logf("卡奈魔盒%s完成：已遍历背包 %d 格", label, d3BagSlotCount)
 	return nil
 }

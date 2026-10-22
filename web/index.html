@@ -194,6 +194,19 @@
           </div>
         </div>
 
+        <div class="helper-controls">
+          <div class="form-item">
+            <span class="form-label">赌博次数：</span>
+            <input type="number" class="input-num xs" id="gambleTimesInput" onchange="saveHelperSettings()"
+              min="2" max="60" placeholder="15" title="血岩赌博助手连按右键的次数（2–60）">
+          </div>
+          <div class="form-item">
+            <span class="form-label">拾取次数：</span>
+            <input type="number" class="input-num xs" id="lootTimesInput" onchange="saveHelperSettings()"
+              min="2" max="99" placeholder="30" title="一键拾取连点左键的次数（2–99）">
+          </div>
+        </div>
+
         <div class="helper-checklist" id="helperChecklist">
           <!-- 由 JS 渲染助手复选框 -->
         </div>

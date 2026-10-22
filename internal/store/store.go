@@ -64,6 +64,10 @@ type HelperSettings struct {
 	ReforgeTarget int `json:"reforge_target,omitempty"`
 	// DelayMS 是每个动作之间的等待时长（动画需要时间，太快会丢点击）。
 	DelayMS int `json:"delay_ms,omitempty"`
+	// GambleTimes / LootTimes 分别是赌博连按右键与拾取连点左键的次数。
+	// 默认值对齐 D3keyHelper（15 / 30），范围也照它的 Updown（2–60 / 2–99）。
+	GambleTimes int `json:"gamble_times,omitempty"`
+	LootTimes   int `json:"loot_times,omitempty"`
 	// DevMode 是开发者模式：输出详细日志（每步取色、判定结果、鼠标去向），
 	// 便于玩家复现问题时把日志整段回传。
 	DevMode bool `json:"dev_mode,omitempty"`
@@ -71,8 +75,22 @@ type HelperSettings struct {
 
 // DefaultHelpers 返回助手功能的缺省设置：快捷键 F5，各助手开关默认关闭。
 func DefaultHelpers() HelperSettings {
-	return HelperSettings{Hotkey: DefaultHelperHotkey, DelayMS: DefaultHelperDelayMS}
+	return HelperSettings{
+		Hotkey:      DefaultHelperHotkey,
+		DelayMS:     DefaultHelperDelayMS,
+		GambleTimes: DefaultGambleTimes,
+		LootTimes:   DefaultLootTimes,
+	}
 }
+
+// 助手次数的默认值与范围（对齐 D3keyHelper 的 Updown：赌博 2–60、拾取 2–99）。
+const (
+	DefaultGambleTimes = 15
+	DefaultLootTimes   = 30
+	MinHelperTimes     = 2
+	MaxGambleTimes     = 60
+	MaxLootTimes       = 99
+)
 
 // IsEnabled 返回指定助手是否启用。
 func (h HelperSettings) IsEnabled(id string) bool {
@@ -103,6 +121,12 @@ func (h HelperSettings) Validate() error {
 	}
 	if h.ReforgeTarget < 0 || h.ReforgeTarget > 5 {
 		return fmt.Errorf("重铸目标品质取值 %d 无效（0–5）", h.ReforgeTarget)
+	}
+	if h.GambleTimes != 0 && (h.GambleTimes < MinHelperTimes || h.GambleTimes > MaxGambleTimes) {
+		return fmt.Errorf("赌博次数必须在 %d–%d 之间，实际 %d", MinHelperTimes, MaxGambleTimes, h.GambleTimes)
+	}
+	if h.LootTimes != 0 && (h.LootTimes < MinHelperTimes || h.LootTimes > MaxLootTimes) {
+		return fmt.Errorf("拾取次数必须在 %d–%d 之间，实际 %d", MinHelperTimes, MaxLootTimes, h.LootTimes)
 	}
 	return nil
 }
@@ -175,6 +199,7 @@ func Path(dir, name string) string {
 func DefaultSettings() *Settings {
 	return &Settings{
 		CurrentGame: games.Default().ID,
+		Helpers:     DefaultHelpers(),
 		FloatingHUD: DefaultFloatingHUD(),
 	}
 }
@@ -194,6 +219,12 @@ func (s *Settings) applyDefaults() {
 	}
 	if s.Helpers.DelayMS == 0 {
 		s.Helpers.DelayMS = h.DelayMS
+	}
+	if s.Helpers.GambleTimes == 0 {
+		s.Helpers.GambleTimes = h.GambleTimes
+	}
+	if s.Helpers.LootTimes == 0 {
+		s.Helpers.LootTimes = h.LootTimes
 	}
 	if s.FloatingHUD.Mode == "" {
 		s.FloatingHUD.Mode = "bar"
