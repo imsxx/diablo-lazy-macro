@@ -2,107 +2,90 @@ package games
 
 import "testing"
 
-// stubD4Pixels 只在一行、一段 x 区间内返回绿色（模拟剩余若干长度的 Buff 条），其余是暗色底。
-type stubD4Pixels struct {
+// stubD4Band 模拟屏幕：只在给定行、给定横向区间返回绿色（其余是暗色底）。
+type stubD4Band struct {
 	w, h             int32
 	originX, originY int32
 	barY             int32
 	barX0, barX1     int32
 }
 
-func (s stubD4Pixels) ClientRect(uintptr) (int32, int32, int32, int32, bool) {
+func (s stubD4Band) ClientRect(uintptr) (int32, int32, int32, int32, bool) {
 	return s.w, s.h, s.originX, s.originY, true
 }
 
-func (s stubD4Pixels) Pixel(x, y int32) (uint8, uint8, uint8, bool) {
-	if y == s.barY && x >= s.barX0 && x < s.barX1 {
-		return 66, 133, 45, true // 实测条内平均色
+func (s stubD4Band) Pixel(x, y int32) (uint8, uint8, uint8, bool) {
+	if y >= s.barY-1 && y <= s.barY+1 && x >= s.barX0 && x < s.barX1 {
+		return 66, 133, 45, true
 	}
-	return 40, 38, 36, true // 条底色
+	return 40, 38, 36, true
 }
 
-// 1920×1080 基准下第 i 条第的左右端点（与实现同一套常量）。
-func d4BarSpan(i int) (int32, int32) {
-	center := d4BuffBarFirst + d4BuffBarStep*float64(i)
-	return int32(center - d4BuffBarWidth/2), int32(center + d4BuffBarWidth/2)
+func (s stubD4Band) Band(x, y, width int32) ([]byte, bool) {
+	out := make([]byte, width*3)
+	for i := int32(0); i < width; i++ {
+		px := x + i
+		if y >= s.barY-1 && y <= s.barY+1 && px >= s.barX0 && px < s.barX1 {
+			out[i*3], out[i*3+1], out[i*3+2] = 66, 133, 45
+		} else {
+			out[i*3], out[i*3+1], out[i*3+2] = 40, 38, 36
+		}
+	}
+	return out, true
 }
 
-// 守卫默认关闭：坐标没在实际窗口比例上标定过，宁可每次都按，也不能误拦。
-func TestD4BuffGuardDisabledByDefault(t *testing.T) {
-	if d4BuffGuardReady {
-		t.Skip("守卫已启用，跳过默认关闭的断言")
-	}
-	x0, x1 := d4BarSpan(0)
-	px := stubD4Pixels{w: 1920, h: 1080, barY: 879, barX0: x0, barX1: x1}
-	if (d4Adapter{}).BuffActive(1, 0, px) {
-		t.Fatal("守卫关闭时必须恒返回 false，否则该技能会被永久跳过")
-	}
+// clearD4Cache 清掉全局标定缓存，避免用例之间互相影响。
+func clearD4Cache() {
+	d4BarMu.Lock()
+	d4BarCache = map[[2]int32]d4BuffBarLayout{}
+	d4BarMu.Unlock()
 }
 
-// withD4Guard 临时打开守卫，跑完恢复。
-func withD4Guard(t *testing.T) {
-	t.Helper()
-	old := d4BuffGuardReady
-	d4BuffGuardReady = true
-	t.Cleanup(func() { d4BuffGuardReady = old })
-}
-
-func TestD4BuffKeepsWhileBarMostlyFull(t *testing.T) {
-	withD4Guard(t)
-	x0, x1 := d4BarSpan(2)
-	px := stubD4Pixels{w: 1920, h: 1080, barY: 879, barX0: x0, barX1: x1}
-	if !(d4Adapter{}).BuffActive(1, 2, px) {
-		t.Fatal("满条应当继续让路（不补按）")
-	}
-}
-
-func TestD4BuffRefreshesWhenBarNearlyGone(t *testing.T) {
-	withD4Guard(t)
-	x0, x1 := d4BarSpan(0)
-	// 只剩左侧 10%：应当补按（返回 false）。
-	px := stubD4Pixels{w: 1920, h: 1080, barY: 879, barX0: x0, barX1: x0 + (x1-x0)/10}
-	if (d4Adapter{}).BuffActive(1, 0, px) {
-		t.Fatal("条只剩 10% 时应当补按")
-	}
-
-	// 剩 30%：仍在阈值之上，继续让路。
-	px.barX1 = x0 + (x1-x0)*3/10
+// 标定只用「条宽 + 中轴对称」，所以给任意一段绿条都能推出 6 段位置。
+func TestD4CalibratesFromSingleBar(t *testing.T) {
+	clearD4Cache()
+	// 1920×1080：把绿条放在第 1 段该在的位置（中心 = 960 - 2.5*43.5 ≈ 851）。
+	px := stubD4Band{w: 1920, h: 1080, barY: 913, barX0: 832, barX1: 871}
 	if !(d4Adapter{}).BuffActive(1, 0, px) {
-		t.Fatal("条剩 30% 时不该补按")
+		t.Fatal("按标定结果，第 1 槽应判为 Buff 生效")
+	}
+	for _, i := range []int{1, 2, 3, 4, 5} {
+		if (d4Adapter{}).BuffActive(1, i, px) {
+			t.Errorf("第 %d 槽不该判为生效（那里没有绿条）", i+1)
+		}
 	}
 }
 
-func TestD4BuffRefreshesWhenBarGone(t *testing.T) {
-	withD4Guard(t)
-	// 条完全消失（0%）也要补按：这就是「断了必补」的兜底。
-	px := stubD4Pixels{w: 1920, h: 1080, barY: 879, barX0: 0, barX1: 0}
-	if (d4Adapter{}).BuffActive(1, 0, px) {
-		t.Fatal("条消失后必须返回 false，让引擎补按")
-	}
-}
-
-func TestD4BuffScalesByWidth(t *testing.T) {
-	withD4Guard(t)
-	// 2205×1122 实测：条在 y≈1009（按宽度缩放），不是按高度缩放的 913。
-	scale := 2205.0 / d4RefWidth
-	y := int32(879 * scale)
-	center := float64(2205)/2 + (d4BuffBarFirst-d4RefWidth/2)*scale
-	half := d4BuffBarWidth * scale / 2
-	px := stubD4Pixels{
-		w: 2205, h: 1122, barY: y,
-		barX0: int32(center-half) - 2, barX1: int32(center+half) + 2,
-	}
+// 换个窗口尺寸（非 16:9）也要能标定：只要 HUD 在底部居中即可。
+func TestD4CalibratesOnDifferentWindowSize(t *testing.T) {
+	clearD4Cache()
+	// 1717×1053：条宽按比例缩小到约 35px，位置仍在中线左侧第一段。
+	px := stubD4Band{w: 1717, h: 1053, barY: 890, barX0: 722, barX1: 757}
 	if !(d4Adapter{}).BuffActive(1, 0, px) {
-		t.Fatal("非 16:9 窗口下应按窗口宽度换算后命中")
+		t.Fatal("非 16:9 窗口下也应能标定并命中")
 	}
 }
 
-func TestD4BuffRejectsBadSlot(t *testing.T) {
-	px := stubD4Pixels{w: 1920, h: 1080, barY: 879}
-	if (d4Adapter{}).BuffActive(1, -1, px) || (d4Adapter{}).BuffActive(1, 6, px) {
-		t.Fatal("越界槽位应返回 false")
+// 扫不到绿条时不缓存、也不误拦：返回 false，让引擎照常按。
+func TestD4NoBarMeansNoGuard(t *testing.T) {
+	clearD4Cache()
+	px := stubD4Band{w: 1600, h: 900, barY: -1, barX0: 0, barX1: 0}
+	for i := 0; i < 6; i++ {
+		if (d4Adapter{}).BuffActive(1, i, px) {
+			t.Fatalf("没有绿条时第 %d 槽必须返回 false，否则该技能永远不按", i+1)
+		}
 	}
-	if (d4Adapter{}).BuffActive(1, 0, nil) {
-		t.Fatal("像素源为 nil 时应返回 false")
+}
+
+// 缓存按客户区尺寸区分：尺寸变了必须重标，不能沿用旧坐标。
+func TestD4CacheIsKeyedBySize(t *testing.T) {
+	clearD4Cache()
+	small := stubD4Band{w: 1280, h: 720, barY: 600, barX0: 553, barX1: 581}
+	if !(d4Adapter{}).BuffActive(1, 0, small) {
+		t.Fatal("1280×720 下应能标定")
+	}
+	large := stubD4Band{w: 2560, h: 1440, barY: 1210, barX0: 1109, barX1: 1162}
+	if !(d4Adapter{}).BuffActive(1, 0, large) {
+		t.Fatal("2560×1440 下应重新标定并命中")
 	}
 }

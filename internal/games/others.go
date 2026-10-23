@@ -1,6 +1,9 @@
 package games
 
-import "math"
+import (
+	"math"
+	"sync"
+)
 
 // standardForceStandKey 是暗黑3/4 共有的「强制站立 / 原地站立」默认键。
 const standardForceStandKey = "SHIFT"
@@ -19,12 +22,7 @@ const standardForceStandKey = "SHIFT"
 // 按高度等比算应是 913、按宽度等比算应是 1009 —— 接近后者，说明暗黑4 的 HUD 是
 // 按窗口宽度缩放的（与暗黑3 按高度缩放不同，所以这里不能复用 d3 的公式）。
 const (
-	d4SlotCount    = 6
-	d4RefWidth     = 1920.0
-	d4BuffBarY     = 879.0
-	d4BuffBarFirst = 877.0
-	d4BuffBarStep  = 43.5
-	d4BuffBarWidth = 39.0
+	d4SlotCount = 6
 
 	// 绿色判据：G 足够亮、且明显压过 R 与 B（实测条内平均 RGB 约 66/133/45）。
 	d4BuffGreenMin   = 95
@@ -36,12 +34,34 @@ const (
 	// 条完全消失（0%）时比例必然低于阈值，所以「断了必补」是这条判据的天然兜底。
 	d4BuffKeepRatio = 0.15
 
+	// 自标定的扫描范围（相对客户区）：技能栏固定在底部正中，只需要扫这一带。
+	d4ScanTopRatio    = 0.70
+	d4ScanBottomRatio = 0.94
+	d4ScanLeftRatio   = 0.28
+	d4ScanRightRatio  = 0.72
+	// 条间距 / 条宽（1920×1080 实测：条 39px、段距 43.5px）。是 UI 设计比例，不随分辨率变。
+	d4StepPerBar = 43.5 / 39.0
+	// 一行里少于这么多绿色像素，就认为当时没有 Buff，标定失败（下次再试）。
+	d4MinBarPixels = 12
 )
 
-// d4BuffGuardReady 表示这套坐标是否已在实际使用的窗口比例上标定通过。
-// 未通过前不启用守卫：误判会直接表现为「某个技能永远不按」。
-// 用变量而非常量，便于测试临时打开验证判定逻辑。
-var d4BuffGuardReady = false
+// d4BuffBarLayout 是一次自标定的结果：条所在行 + 6 个槽位的横向区间（客户区相对坐标）。
+// 只依赖「技能栏固定在底部正中」这一条与分辨率无关的事实，不写死任何像素。
+type d4BuffBarLayout struct {
+	y  int32
+	x0 [d4SlotCount]int32
+	x1 [d4SlotCount]int32
+}
+
+// 标定结果按客户区尺寸缓存：同一尺寸算一次即可，窗口尺寸一变就自动重算。
+// 每次启动工具都是新进程、缓存为空，等价于「每次启动重标一次」。
+var (
+	d4BarMu    sync.Mutex
+	d4BarCache = map[[2]int32]d4BuffBarLayout{}
+)
+
+// d4BuffGuardReady 只是总开关（测试用）。守卫是否真的生效，取决于能否标定到 Buff 条。
+var d4BuffGuardReady = true
 
 type d4Adapter struct{}
 
@@ -70,60 +90,33 @@ func d4IsGreen(r, g, b uint8) bool {
 		int(g)-int(b) > d4BuffGreenOverB
 }
 
-// BuffActive 采样技能槽上方的绿色持续时间条，按「剩余比例」判断是否还该让路：
-// 只剩不到 15% 时返回 false（引擎据此补按一次），条整个消失同样返回 false。
-// 这样既做到「快结束就续」，也保留「断了必补」的兜底。
+// BuffActive 判断某槽位的 Buff 是否仍该让路（true = 还在生效，本轮跳过）。
+// 坐标不写死：第一次需要时在技能栏一带自标定一次，按客户区尺寸缓存；
+// 窗口尺寸一变就自动重标。标定不到 Buff 条时返回 false（照常按），绝不误拦。
 func (d4Adapter) BuffActive(hwnd uintptr, slotIdx int, px PixelSource) bool {
-	// 守卫暂时关闭：坐标只在 1920×1080 的标准 16:9 下量过，玩家把窗口拉成
-	// 1717×1053 这类非标准比例后条的位置对不上，守卫就会误判成「Buff 还在」，
-	// 永远不按该技能——表现为「这个键没动静」，比误按更糟。
-	// 标定完成后把 d4BuffGuardReady 改为 true 即可启用，下面的实现不用改。
-	if !d4BuffGuardReady {
+	if !d4BuffGuardReady || px == nil || slotIdx < 0 || slotIdx >= d4SlotCount {
 		return false
 	}
-	if px == nil || slotIdx < 0 || slotIdx >= d4SlotCount {
+	w, h, ox, oy, ok := px.ClientRect(hwnd)
+	if !ok || w <= 0 || h <= 0 {
 		return false
 	}
-	w, _, ox, oy, ok := px.ClientRect(hwnd)
-	if !ok || w <= 0 {
+	band, ok := px.(BandSource)
+	if !ok {
 		return false
 	}
-	scale := float64(w) / d4RefWidth
-	centerX := d4BuffBarFirst + d4BuffBarStep*float64(slotIdx)
-	barCenter := float64(w)/2 + (centerX-d4RefWidth/2)*scale
-	y := int32(math.Round(d4BuffBarY*scale)) + oy
-	half := d4BuffBarWidth * scale / 2
-
-	// 优先一次抓整行（一次 BitBlt），拿完整条再算比例。
-	if band, ok := px.(BandSource); ok {
-		barWidth := int32(math.Round(2*half)) + 1
-		left := int32(math.Round(barCenter-half)) + ox
-		if data, ok := band.Band(left, y, barWidth); ok {
-			green, total := 0, 0
-			for i := 0; i+2 < len(data); i += 3 {
-				total++
-				if d4IsGreen(data[i], data[i+1], data[i+2]) {
-					green++
-				}
-			}
-			if total == 0 {
-				return false
-			}
-			return float64(green)/float64(total) >= d4BuffKeepRatio
-		}
+	layout, ok := d4Layout(w, h, ox, oy, band)
+	if !ok {
+		return false
 	}
-
-	// 回退：像素源不支持整行抓取时，按稀疏单点估算（约 7 点）。
-	const step = 6.0
+	data, ok := band.Band(layout.x0[slotIdx]+ox, layout.y+oy, layout.x1[slotIdx]-layout.x0[slotIdx]+1)
+	if !ok {
+		return false
+	}
 	green, total := 0, 0
-	for dx := -half; dx <= half; dx += step {
-		x := int32(math.Round(barCenter+dx)) + ox
-		r, g, b, ok := px.Pixel(x, y)
-		if !ok {
-			continue
-		}
+	for i := 0; i+2 < len(data); i += 3 {
 		total++
-		if d4IsGreen(r, g, b) {
+		if d4IsGreen(data[i], data[i+1], data[i+2]) {
 			green++
 		}
 	}
@@ -131,6 +124,125 @@ func (d4Adapter) BuffActive(hwnd uintptr, slotIdx int, px PixelSource) bool {
 		return false
 	}
 	return float64(green)/float64(total) >= d4BuffKeepRatio
+}
+
+// d4Layout 返回当前窗口尺寸下的标定结果；未标定过就标一次，失败不缓存（下次再试）。
+func d4Layout(w, h, ox, oy int32, band BandSource) (d4BuffBarLayout, bool) {
+	key := [2]int32{w, h}
+	d4BarMu.Lock()
+	cached, hit := d4BarCache[key]
+	d4BarMu.Unlock()
+	if hit {
+		return cached, true
+	}
+	layout, ok := calibrateD4Bar(w, h, ox, oy, band)
+	if !ok {
+		return d4BuffBarLayout{}, false
+	}
+	d4BarMu.Lock()
+	d4BarCache[key] = layout
+	d4BarMu.Unlock()
+	return layout, true
+}
+
+// calibrateD4Bar 在「底部居中」的技能栏一带扫描绿色 Buff 条，得到行与 6 个槽位区间。
+//
+// 只依赖两个与分辨率无关的事实：
+//  1. 技能栏固定在客户区底部正中（所以 6 个槽位以中线左右对称：3 个在左、3 个在右）；
+//  2. 条的宽度与间距是固定比例（d4StepPerBar）。
+//
+// 因此只要扫到任意一条绿条，就能用「宽度 + 中线」推出全部 6 段的位置，
+// 完全不需要知道游戏是按高度还是按宽度缩放 HUD。
+func calibrateD4Bar(w, h, ox, oy int32, band BandSource) (d4BuffBarLayout, bool) {
+	left := int32(float64(w) * d4ScanLeftRatio)
+	width := int32(float64(w) * (d4ScanRightRatio - d4ScanLeftRatio))
+	if width <= 0 {
+		return d4BuffBarLayout{}, false
+	}
+	top := int32(float64(h) * d4ScanTopRatio)
+	bottom := int32(float64(h) * d4ScanBottomRatio)
+
+	// 粗扫找行（步长 4px）：一次标定只做一次，几毫秒一次抓屏也完全可接受。
+	bestY, best := int32(-1), 0
+	for y := top; y < bottom; y += 4 {
+		data, ok := band.Band(left+ox, y+oy, width)
+		if !ok {
+			continue
+		}
+		if n := countD4Green(data); n > best {
+			best, bestY = n, y
+		}
+	}
+	if bestY < 0 || best < d4MinBarPixels {
+		return d4BuffBarLayout{}, false // 当时没有 Buff 条：等下次（引擎会先按一次技能）
+	}
+
+	// 精扫：在粗扫结果附近逐行确认，避免落在条的上下边缘。
+	row, found := int32(-1), 0
+	for y := bestY - 4; y <= bestY+4; y++ {
+		if y < top || y >= bottom {
+			continue
+		}
+		data, ok := band.Band(left+ox, y+oy, width)
+		if !ok {
+			continue
+		}
+		if n := countD4Green(data); n > found {
+			found, row = n, y
+		}
+	}
+	if row < 0 {
+		return d4BuffBarLayout{}, false
+	}
+
+	data, ok := band.Band(left+ox, row+oy, width)
+	if !ok {
+		return d4BuffBarLayout{}, false
+	}
+	// 取最左一段绿条的宽度作为「条宽」。
+	runStart, runEnd := -1, -1
+	for i := 0; i+2 < len(data); i += 3 {
+		green := d4IsGreen(data[i], data[i+1], data[i+2])
+		idx := int32(i / 3)
+		if green && runStart < 0 {
+			runStart = int(idx)
+		}
+		if !green && runStart >= 0 && runEnd < 0 {
+			runEnd = int(idx) - 1
+			break
+		}
+	}
+	if runStart < 0 {
+		return d4BuffBarLayout{}, false
+	}
+	if runEnd < 0 {
+		runEnd = int(width) - 1
+	}
+	barW := int32(runEnd - runStart + 1)
+	if barW < 8 {
+		return d4BuffBarLayout{}, false
+	}
+
+	// 6 段以中线对称：第 0 段中心 = 中线 - 2.5 * 段距。
+	step := float64(barW) * d4StepPerBar
+	var out d4BuffBarLayout
+	out.y = row
+	for i := 0; i < d4SlotCount; i++ {
+		center := float64(w)/2 + (float64(i)-2.5)*step
+		out.x0[i] = int32(math.Round(center - float64(barW)/2))
+		out.x1[i] = int32(math.Round(center + float64(barW)/2))
+	}
+	return out, true
+}
+
+func countD4Green(data []byte) int {
+	n := 0
+	for i := 0; i+2 < len(data); i += 3 {
+		if d4IsGreen(data[i], data[i+1], data[i+2]) {
+			n++
+		}
+	}
+	return n
 }
 
 // standardSlots 是暗黑3/4 通用的 6 技能槽默认定义。
