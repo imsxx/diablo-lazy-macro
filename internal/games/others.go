@@ -3,6 +3,7 @@ package games
 import (
 	"math"
 	"sync"
+	"time"
 )
 
 // standardForceStandKey 是暗黑3/4 共有的「强制站立 / 原地站立」默认键。
@@ -58,6 +59,16 @@ type d4BuffBarLayout struct {
 var (
 	d4BarMu    sync.Mutex
 	d4BarCache = map[[2]int32]d4BuffBarLayout{}
+	// 标定失败后的冷却：扫一次要几十毫秒（每次抓屏 5~6ms × 几十行），
+	// 若每 150ms 都重试，主循环会被拖到无响应，游戏/系统会直接结束进程。
+	// 因此失败后至少等 d4CalibrateRetry 再试，且整个进程最多尝试 d4CalibrateMax 次。
+	d4BarNextTry  time.Time
+	d4BarAttempts int
+)
+
+const (
+	d4CalibrateRetry = 3 * time.Second
+	d4CalibrateMax   = 5
 )
 
 // d4BuffGuardReady 只是总开关（测试用）。守卫是否真的生效，取决于能否标定到 Buff 条。
@@ -131,18 +142,26 @@ func d4Layout(w, h, ox, oy int32, band BandSource) (d4BuffBarLayout, bool) {
 	key := [2]int32{w, h}
 	d4BarMu.Lock()
 	cached, hit := d4BarCache[key]
+	ready := time.Now().Before(d4BarNextTry) || d4BarAttempts >= d4CalibrateMax
 	d4BarMu.Unlock()
 	if hit {
 		return cached, true
 	}
-	layout, ok := calibrateD4Bar(w, h, ox, oy, band)
-	if !ok {
+	if ready {
 		return d4BuffBarLayout{}, false
 	}
+
+	layout, ok := calibrateD4Bar(w, h, ox, oy, band)
+
 	d4BarMu.Lock()
-	d4BarCache[key] = layout
+	d4BarAttempts++
+	if ok {
+		d4BarCache[key] = layout
+	} else {
+		d4BarNextTry = time.Now().Add(d4CalibrateRetry)
+	}
 	d4BarMu.Unlock()
-	return layout, true
+	return layout, ok
 }
 
 // calibrateD4Bar 在「底部居中」的技能栏一带扫描绿色 Buff 条，得到行与 6 个槽位区间。
@@ -162,9 +181,10 @@ func calibrateD4Bar(w, h, ox, oy int32, band BandSource) (d4BuffBarLayout, bool)
 	top := int32(float64(h) * d4ScanTopRatio)
 	bottom := int32(float64(h) * d4ScanBottomRatio)
 
-	// 粗扫找行（步长 4px）：一次标定只做一次，几毫秒一次抓屏也完全可接受。
+	// 粗扫找行（步长 8px）：Buff 条本身有好几像素高，8px 足够命中，
+	// 而每次抓屏在本机要 5~6ms，步长翻倍就能把标定耗时砍半。
 	bestY, best := int32(-1), 0
-	for y := top; y < bottom; y += 4 {
+	for y := top; y < bottom; y += 8 {
 		data, ok := band.Band(left+ox, y+oy, width)
 		if !ok {
 			continue

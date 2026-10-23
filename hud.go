@@ -687,7 +687,15 @@ func (h *floatingHUD) update(snap runtimeSnapshot, foreground bool) {
 	// 只有内容真的变了才重绘：主循环每 5–10ms 调一次，无条件 Invalidate 会让 GDI 一直忙。
 	changed := needShow || prevStatus != h.status || prevTag != h.gameTag ||
 		prevName != h.profileName || prevForeground != h.foreground
+	curStatus, curEnabled := h.status, snap.Engine != nil && snap.Engine.Enabled()
 	h.mu.Unlock()
+
+	// 状态变化留痕：悬浮窗上只有一句文案，出问题时没法判断是「前台判定失败」
+	// 还是「引擎状态没同步」，日志里补上前台与开关两个原始输入。
+	if prevStatus != curStatus || prevForeground != foreground {
+		h.app.log.Printf("[HUD] 状态 → %s（游戏在前台=%v，宏已开启=%v）",
+			engineStatusShort(engineStatus(curStatus)), foreground, curEnabled)
+	}
 
 	if needShow {
 		procShowWindow.Call(h.hwnd, uintptr(SW_SHOWNOACTIVATE))

@@ -1,6 +1,9 @@
 package games
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 // stubD4Band 模拟屏幕：只在给定行、给定横向区间返回绿色（其余是暗色底）。
 type stubD4Band struct {
@@ -34,10 +37,12 @@ func (s stubD4Band) Band(x, y, width int32) ([]byte, bool) {
 	return out, true
 }
 
-// clearD4Cache 清掉全局标定缓存，避免用例之间互相影响。
+// clearD4Cache 清掉全局标定缓存与重试冷却，避免用例之间互相影响。
 func clearD4Cache() {
 	d4BarMu.Lock()
 	d4BarCache = map[[2]int32]d4BuffBarLayout{}
+	d4BarNextTry = time.Time{}
+	d4BarAttempts = 0
 	d4BarMu.Unlock()
 }
 
