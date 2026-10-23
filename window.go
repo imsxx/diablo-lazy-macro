@@ -477,9 +477,11 @@ func (w *mainWindow) subclass() {
 		if msg == WM_MOUSEACTIVATE {
 			return uintptr(MA_ACTIVATE)
 		}
-		if msg == WM_SETFOCUS {
-			procSetFocus.Call(w.hwnd)
-		}
+		// 这里曾经有一句「收到 WM_SETFOCUS 就 SetFocus(自己)」，本意是让输入框能拿到焦点，
+		// 实际是把自己再次设成焦点、再次触发 WM_SETFOCUS —— 无限递归。它跑在 Windows 的
+		// 消息回调栈上（不是 Go 的 goroutine 栈），栈一满进程直接消失，日志里一个字都不会留。
+		// 触发条件正是「焦点在 WebView2 子窗口和主窗口之间切换」：点下拉、点输入框、按任意键。
+		// 焦点本来由 walk + WebView2 自己管理，这里不需要也不应该插手。
 		if msg == WM_DPICHANGED {
 			w.applyDPISize()
 		}
