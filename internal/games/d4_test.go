@@ -98,8 +98,17 @@ func TestD4CalibrateFailsWithoutBar(t *testing.T) {
 	}
 }
 
+// enableGuard 临时打开守卫（默认关闭，坐标还没在实机核对）。
+func enableGuard(t *testing.T) {
+	t.Helper()
+	old := d4BuffGuardReady
+	d4BuffGuardReady = true
+	t.Cleanup(func() { d4BuffGuardReady = old })
+}
+
 // 命中缓存时按剩余比例判定：满条让路、条消失补按。
 func TestD4BuffActiveUsesCachedLayout(t *testing.T) {
+	enableGuard(t)
 	clearD4Cache()
 	const w, h = 1920, 1080
 	px := stubD4Band{w: w, h: h, barY: 913, barX0: 832, barX1: 871}

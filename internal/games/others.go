@@ -1,7 +1,9 @@
 package games
 
 import (
+	"fmt"
 	"math"
+	"os"
 	"sync"
 	"time"
 )
@@ -73,8 +75,11 @@ const (
 	d4CalibrateMax   = 5
 )
 
-// d4BuffGuardReady 只是总开关（测试用）。守卫是否真的生效，取决于能否标定到 Buff 条。
-var d4BuffGuardReady = true
+// d4BuffGuardReady 是守卫总开关。自标定的坐标还没在实机上核对过，
+// 一旦判错方向（把「没 Buff」判成「有 Buff」），该技能就会永远不按——
+// 表现正是「连点只按了一次」。在坐标核对通过之前，这里保持关闭：
+// 「保持Buff」退化为按间隔连点，至少宏是能用的。
+var d4BuffGuardReady = false
 
 type d4Adapter struct{}
 
@@ -113,7 +118,7 @@ func d4IsGreen(r, g, b uint8) bool {
 // 坐标不写死：第一次需要时在技能栏一带自标定一次，按客户区尺寸缓存；
 // 窗口尺寸一变就自动重标。标定不到 Buff 条时返回 false（照常按），绝不误拦。
 func (d4Adapter) BuffActive(hwnd uintptr, slotIdx int, px PixelSource) bool {
-	if !d4BuffGuardReady || px == nil || slotIdx < 0 || slotIdx >= d4SlotCount {
+	if px == nil || slotIdx < 0 || slotIdx >= d4SlotCount {
 		return false
 	}
 	w, h, ox, oy, ok := px.ClientRect(hwnd)
@@ -122,6 +127,13 @@ func (d4Adapter) BuffActive(hwnd uintptr, slotIdx int, px PixelSource) bool {
 	}
 	band, ok := px.(BandSource)
 	if !ok {
+		return false
+	}
+	if !d4BuffGuardReady {
+		// 守卫关闭期间仍然在后台标定一次：标定结果只写日志、不参与判定。
+		// 这样「保持Buff」照常按间隔连点（不会再也不按），同时又能拿到
+		// 当前分辨率下真实的条位置，用来核对坐标是否对得上。
+		d4Layout(w, h, ox, oy, px)
 		return false
 	}
 	layout, ok := d4Layout(w, h, ox, oy, px)
@@ -166,6 +178,12 @@ func d4Layout(w, h, ox, oy int32, px PixelSource) (d4BuffBarLayout, bool) {
 
 	go func() {
 		layout, ok := calibrateD4Bar(w, h, ox, oy, px)
+		if ok {
+			fmt.Fprintf(os.Stderr, "[Buff] 标定成功：窗口 %dx%d 行 y=%d 条宽=%d 各段中心=%v\n",
+				w, h, layout.y, layout.x1[0]-layout.x0[0]+1, layout.x0)
+		} else {
+			fmt.Fprintf(os.Stderr, "[Buff] 标定失败：窗口 %dx%d 的扫描带里没找到绿色条\n", w, h)
+		}
 		d4BarMu.Lock()
 		d4BarCalibrating = false
 		d4BarAttempts++
