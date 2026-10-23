@@ -126,11 +126,13 @@
               title="删除当前配置（需二次确认）">删除</button>
           </div>
 
+          <!-- 运行期间按住：整场宏保持按下的修饰键（不是每次点击的临时修饰） -->
+          <div class="profile-holds" id="profileHolds"></div>
+
           <div class="slot-header">
             <span class="col-slot" id="slotOrderHeader"
               title="↓ 逐个执行（一轮走完再回头）；→ 各自独立计时">顺序</span>
             <span class="col-key">快捷键</span>
-            <span class="col-mod" title="发送该键时同时按住的修饰键：站立 / 移动 / 交互（暗黑4 的强制站立 / 强制移动 / 强制交互）">修饰</span>
             <span class="col-strategy" title="禁用=不自动触发；按住不放=持续按住；连点=按间隔重复；保持Buff=屏幕找色守卫（暗黑3）">释放策略</span>
             <span class="col-interval" title="连点与保持Buff 的触发周期（毫秒），最小 1ms">执行间隔 (ms)</span>
             <span class="col-delay" title="延迟区间 (ms)：最小/最大。只填一个，另一个会在失焦或回车后自动补成相同值（即固定延迟）；两个不同则在区间内随机；都空＝不延迟。仅「连点」生效">延迟区间 (ms)</span>

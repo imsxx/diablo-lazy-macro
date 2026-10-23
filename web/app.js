@@ -247,16 +247,45 @@ function renderTabs() {
   container.innerHTML = parts.join('');
 }
 
-// modOptions 生成「修饰」下拉：值存键名，界面显示中文名。
-// 强制移动在暗黑4 里默认未绑定，没配就不出现在列表里。
-function modOptions(current) {
+// renderProfileHolds 渲染「运行期间按住」三个开关。
+// 只渲染本机已配置键位的那几项：强制移动在暗黑4 里默认不绑，没配就不显示。
+function renderProfileHolds() {
+  const box = $id('profileHolds');
+  const prof = currentProfile();
+  if (!box || !prof) return;
   const mk = (state && state.modKeys) || {};
-  const items = [['', '无']];
-  if (mk.stand) items.push([mk.stand, '站立']);
-  if (mk.move) items.push([mk.move, '移动']);
-  if (mk.interact) items.push([mk.interact, '交互']);
-  return items.map(([value, label]) =>
-    `<option value="${value}"${value === (current || '') ? ' selected' : ''}>${label}</option>`).join('');
+  const held = prof.holds || [];
+  const items = [
+    ['stand', '强制站立', mk.stand, '整场按住站立键：适合「站着不动才有增伤」的 BD'],
+    ['move', '强制移动', mk.move, '整场按住移动键：避免引导技能被祭坛、地形门打断'],
+    ['interact', '强制交互', mk.interact, '整场按住交互键：优先拾取/开门而不是攻击'],
+  ].filter(([, , key]) => !!key);
+
+  if (!items.length) {
+    box.innerHTML = '';
+    return;
+  }
+  box.innerHTML = '<span class="form-label">运行期间按住：</span>' + items.map(([id, label, key, tip]) =>
+    `<label class="checkbox-label sm" title="${tip}">` +
+    `<input type="checkbox" id="hold-${id}" value="${key}"${held.includes(key) ? ' checked' : ''} onchange="saveProfileHolds()">` +
+    `<span>${label}</span></label>`).join('');
+}
+
+// saveProfileHolds 收集勾选项（值为键名）并提交。
+async function saveProfileHolds() {
+  const prof = currentProfile();
+  if (!prof) return;
+  const holds = [];
+  document.querySelectorAll('#profileHolds input:checked').forEach((cb) => holds.push(cb.value));
+  const r = await callApi('api_updateProfileHolds', currentTab, holds);
+  if (!r.ok) {
+    await reloadState();
+    renderProfileHolds();
+    return;
+  }
+  await reloadState();
+  renderProfileHolds();
+  flashAutoSave();
 }
 
 function renderSlots() {
@@ -303,10 +332,7 @@ function renderSlots() {
         <button class="keycap-btn sm" data-slot="${idx}" data-field="key"
           title="当前：${esc(slot.keyLabel || '未选择')} · 点击后按任意键录入（Esc 取消）">${esc(slot.keyLabel || '—')}</button>
       </span>
-      <span class="col-mod">
-        <select class="select-dropdown xs" data-slot="${idx}" data-field="mod"
-          title="发送这个技能时同时按住的修饰键：站立 / 移动 / 交互（对应暗黑4 的强制站立 / 强制移动 / 强制交互）">${modOptions(slot.mod)}</select>
-      </span>
+
       <span class="col-strategy">
         <select class="select-dropdown md" data-slot="${idx}" data-field="strategy"
           title="禁用=不自动触发；按住不放=持续按住；连点=按间隔重复；保持Buff=屏幕找色守卫（暗黑3）">
@@ -329,6 +355,7 @@ function renderSlots() {
     `;
     container.appendChild(row);
   });
+  renderProfileHolds();
 }
 
 function renderExtraSettings() {
@@ -615,16 +642,12 @@ function bindSlotsDelegation() {
     if (!slot) return;
 
     let key = slot.key;
-    let mod = slot.mod || '';
     let strategy = slot.strategy;
     let interval = slot.intervalMS;
     let delayMin = slot.delayMinMS;
     let delayMax = slot.delayMaxMS;
 
     switch (el.dataset.field) {
-      case 'mod':
-        mod = el.value;
-        break;
       case 'strategy':
         strategy = parseInt(el.value, 10) || 0;
         break;
@@ -651,7 +674,7 @@ function bindSlotsDelegation() {
       default:
         return;
     }
-    await commitSlot(slotIdx, key, mod, strategy, interval, delayMin, delayMax);
+    await commitSlot(slotIdx, key, strategy, interval, delayMin, delayMax);
   });
 }
 
@@ -670,8 +693,8 @@ function setSlotField(slotIdx, field, value) {
   if (el) el.value = value;
 }
 
-async function commitSlot(slotIdx, key, mod, strategy, interval, delayMin, delayMax) {
-  const r = await callApi('api_updateSlot', currentTab, slotIdx, key, mod, strategy, interval, delayMin, delayMax);
+async function commitSlot(slotIdx, key, strategy, interval, delayMin, delayMax) {
+  const r = await callApi('api_updateSlot', currentTab, slotIdx, key, strategy, interval, delayMin, delayMax);
   if (!r.ok) {
     // 失败时把控件恢复成后端实际保存的值（可能是被夹取/拒绝后的结果）
     await reloadState();
@@ -986,7 +1009,7 @@ async function applyCapturedKey(target, token, label) {
       const slot = slotAt(target.target.slotIdx);
       if (!slot) return;
       result = await callApi('api_updateSlot', currentTab, target.target.slotIdx, token,
-        slot.mod || '', slot.strategy, slot.intervalMS, slot.delayMinMS, slot.delayMaxMS);
+        slot.strategy, slot.intervalMS, slot.delayMinMS, slot.delayMaxMS);
       break;
     }
     case 'toggle':

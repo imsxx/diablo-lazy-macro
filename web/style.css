@@ -484,9 +484,20 @@ body {
   line-height: 1;
 }
 .col-key { width: 76px; text-align: center; flex-shrink: 0; }
-/* 修饰列：只放下拉（无/站立/移动/交互），窄一点给延迟列留空间 */
-.col-mod { width: 56px; text-align: center; flex-shrink: 0; }
-.col-mod select { width: 52px; }
+/* 运行期间按住：方案级开关，放在配置名与技能表之间 */
+.profile-holds {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 0 8px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--border-main);
+  flex-wrap: wrap;
+}
+
+.profile-holds .form-label {
+  color: var(--color-accent);
+}
 .col-strategy { width: 122px; text-align: center; flex-shrink: 0; }
 .col-interval { width: 112px; text-align: center; flex-shrink: 0; }
 /* 延迟列用「最小～最大」两个紧凑输入表达区间 */

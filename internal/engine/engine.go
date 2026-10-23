@@ -55,6 +55,12 @@ type Engine struct {
 	forceStandApply uint16
 	forceStandVK    uint16
 
+	// 方案级「运行期间一直按住」的键（强制站立 / 强制移动 / 强制交互）。
+	// profileHolds 是当前方案的完整列表；holdsActive 是真正由我们按下的那些，
+	// 释放时只松开自己按下的，别把玩家手动按住的一起抬起来。
+	profileHolds []uint16
+	holdsActive  []uint16
+
 	// 暂停（智能暂停用）：暂停期间不发送任何规则按键。
 	// pauseUntil 为零值表示持续暂停，直到 Resume 才恢复。
 	paused     bool
@@ -94,6 +100,7 @@ func (e *Engine) loadProfileLocked(i int) {
 	}
 	e.seqCursor = 0
 	e.seqNext = time.Time{}
+	e.profileHolds = e.cfg.Profiles[i].HoldVKs
 	rules := e.cfg.Profiles[i].Rules
 	e.rules = make([]ruleState, 0, len(rules))
 	for _, r := range rules {
@@ -246,7 +253,41 @@ func (e *Engine) ReleaseAll() {
 	e.releaseHoldsLocked()
 }
 
+// syncProfileHoldsLocked 维护方案级的按住键：宏开启且游戏在前台时保持按下，
+// 停止 / 暂停 / 失焦立即松开。只松开自己按下的键，玩家手动按住的保持原样。
+func (e *Engine) syncProfileHoldsLocked(foreground bool) {
+	if e.enabled && foreground && !e.paused {
+		for _, vk := range e.profileHolds {
+			if containsVK(e.holdsActive, vk) || e.state.Pressed(vk) {
+				continue
+			}
+			if err := e.sender.KeyDown(vk); err != nil {
+				e.onError(err)
+				continue
+			}
+			e.holdsActive = append(e.holdsActive, vk)
+		}
+		return
+	}
+	for _, vk := range e.holdsActive {
+		if err := e.sender.KeyUp(vk); err != nil {
+			e.onError(err)
+		}
+	}
+	e.holdsActive = nil
+}
+
+func containsVK(list []uint16, vk uint16) bool {
+	for _, v := range list {
+		if v == vk {
+			return true
+		}
+	}
+	return false
+}
+
 func (e *Engine) releaseHoldsLocked() {
+	e.syncProfileHoldsLocked(false)
 	for i := range e.rules {
 		st := &e.rules[i]
 		if !st.holding {
@@ -265,9 +306,11 @@ func (e *Engine) Tick(now time.Time, foreground bool) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if e.paused {
+		e.syncProfileHoldsLocked(false) // 暂停期间不能继续按住强制站立/移动
 		e.tickPausedLocked(now)
 		return
 	}
+	e.syncProfileHoldsLocked(foreground)
 	if e.mode == config.ModeSequential {
 		e.tickSequentialLocked(now, foreground)
 		return
@@ -338,7 +381,7 @@ func (e *Engine) tickSequentialLocked(now time.Time, foreground bool) {
 		if e.buffGateLocked(st) {
 			continue
 		}
-		e.tapLocked(st.rule.Keys[0], st.rule.ModVK)
+		e.tapLocked(st.rule.Keys[0])
 		e.seqNext = now.Add(e.delayOffsetLocked(st.rule) + time.Duration(st.rule.IntervalMS)*time.Millisecond)
 		return
 	}
@@ -364,28 +407,14 @@ func (e *Engine) tickTapLocked(st *ruleState, now time.Time) {
 		st.nextFire = now.Add(buffResampleDelay)
 		return
 	}
-	e.tapLocked(st.rule.Keys[0], st.rule.ModVK)
+	e.tapLocked(st.rule.Keys[0])
 	st.nextFire = now.Add(time.Duration(st.rule.IntervalMS) * time.Millisecond)
 	st.fireAt = time.Time{}
 }
 
-// tapLocked 合成一次点击。modVK != 0 时先按住该修饰键（强制站立 / 强制移动 / 强制交互），
-// 点完立即释放；否则沿用「左键连点自动站立」的全局设置。
-// 玩家自己已按住修饰键时直接点击，不重复按下，避免抬起时把玩家的按住状态一起松开。
-func (e *Engine) tapLocked(vk, modVK uint16) {
-	if modVK != 0 && !e.state.Pressed(modVK) {
-		if err := e.sender.KeyDown(modVK); err != nil {
-			e.onError(err)
-			return
-		}
-		if err := e.sender.Tap(vk); err != nil {
-			e.onError(err)
-		}
-		if err := e.sender.KeyUp(modVK); err != nil {
-			e.onError(err)
-		}
-		return
-	}
+// tapLocked 合成一次点击。若该键需要强制站立（暗黑3/4 的左键技能）且启用中，
+// 则先按住强制站立键、点完立即释放；玩家自己已按住该键时直接点击、不重复按下。
+func (e *Engine) tapLocked(vk uint16) {
 	if e.forceStandVK != 0 && vk == e.forceStandApply && !e.state.Pressed(e.forceStandVK) {
 		if err := e.sender.KeyDown(e.forceStandVK); err != nil {
 			e.onError(err)
@@ -496,7 +525,7 @@ func (e *Engine) NextDue(now time.Time) time.Time {
 func (e *Engine) activateLocked(st *ruleState, now time.Time) {
 	switch st.rule.Kind {
 	case config.ActionOnce:
-		e.tapLocked(st.rule.Keys[0], st.rule.ModVK)
+		e.tapLocked(st.rule.Keys[0])
 	case config.ActionHold:
 		if err := e.sender.KeyDown(st.rule.Keys[0]); err != nil {
 			e.onError(err)
@@ -522,6 +551,6 @@ func (e *Engine) deactivateLocked(st *ruleState) {
 }
 
 func (e *Engine) fireLocked(st *ruleState, vk uint16, now time.Time) {
-	e.tapLocked(vk, st.rule.ModVK)
+	e.tapLocked(vk)
 	st.nextFire = now.Add(time.Duration(st.rule.IntervalMS) * time.Millisecond)
 }

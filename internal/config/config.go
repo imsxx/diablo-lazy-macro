@@ -80,8 +80,12 @@ type Raw struct {
 
 // RawProfile 是一套可切换的规则集合的 JSON 形态。
 type RawProfile struct {
-	Name  string    `json:"n,omitempty"`
-	Mode  string    `json:"m,omitempty"` // 触发模式：seq 循环 / con 并发（缺省即并发）
+	Name string `json:"n,omitempty"`
+	Mode string `json:"m,omitempty"` // 触发模式：seq 循环 / con 并发（缺省即并发）
+	// Holds 是「宏运行期间一直按住」的键（键盘键名）：强制站立 / 强制移动 / 强制交互。
+	// 与规则的 mod 不同，它不是点按前后的临时修饰，而是整个运行期间保持按下——
+	// 对应「站着不动才有增伤」「按住强制移动才不会被打断」这类 BD 需求。
+	Holds []string  `json:"h,omitempty"`
 	Rules []RawRule `json:"r"`
 }
 
@@ -96,9 +100,6 @@ type RawRule struct {
 	// DelayMinMS 是延迟区间的下界（毫秒，非负）：缺省（0）表示与 |d| 相同，即固定延迟。
 	// 与 d 一起表达「每次在 [DelayMinMS, |d|] 之间随机取一个幅度」。
 	DelayMinMS int `json:"dn,omitempty"`
-	// Mod 是发送该键时要同时按住的修饰键（键盘键名，如 SHIFT）。
-	// 对应暗黑4 的强制站立 / 强制移动 / 强制交互这类「按住某键再点击」的操作；留空表示不按。
-	Mod string `json:"mod,omitempty"`
 }
 
 // Parsed 是校验并解析后的可执行形式。
@@ -114,7 +115,9 @@ type Parsed struct {
 type ParsedProfile struct {
 	Name  string
 	Mode  string // 触发模式：ModeSequential / ModeConcurrent
-	Rules []ParsedRule
+	// HoldVKs 是宏运行期间需要一直按住的键（已解析成虚拟键码）。
+	HoldVKs []uint16
+	Rules   []ParsedRule
 }
 
 // ParsedRule 是解析后的规则；HoldVK == 0 表示宏开启期间持续触发，否则为按住触发键。
@@ -129,8 +132,6 @@ type ParsedRule struct {
 	// DelayMinMS == 0 表示固定延迟 |DelayMS|。
 	DelayMS    int
 	DelayMinMS int
-	// ModVK 是发送前需要按住的修饰键；0 表示不按。
-	ModVK uint16
 }
 
 // Decode 解析分享码，同时返回原始形态（用于持久化与再导出）与可执行形式。
@@ -282,6 +283,25 @@ func resolve(raw *Raw) (*Parsed, error) {
 			return nil, err
 		}
 		pp := ParsedProfile{Name: rp.Name, Mode: mode}
+		seenHold := map[uint16]bool{}
+		for hi, h := range rp.Holds {
+			h = strings.TrimSpace(h)
+			if h == "" {
+				return nil, fmt.Errorf("方案 #%d 的第 %d 个按住键为空", pi+1, hi+1)
+			}
+			vk, err := keys.Parse(h)
+			if err != nil {
+				return nil, fmt.Errorf("方案 #%d 的按住键无效：%v", pi+1, err)
+			}
+			if keys.IsMouse(vk) {
+				return nil, fmt.Errorf("方案 #%d 的按住键不支持鼠标键（%s），请改用键盘键", pi+1, keys.Label(vk))
+			}
+			if seenHold[vk] {
+				return nil, fmt.Errorf("方案 #%d 的按住键重复：%s", pi+1, keys.Label(vk))
+			}
+			seenHold[vk] = true
+			pp.HoldVKs = append(pp.HoldVKs, vk)
+		}
 		for ri, rr := range rp.Rules {
 			rule, err := resolveRule(pi+1, ri+1, rr)
 			if err != nil {
@@ -365,17 +385,6 @@ func resolveRule(profileNo, ruleNo int, r RawRule) (*ParsedRule, error) {
 
 	if err := resolveRuleTuning(where, r, rule); err != nil {
 		return nil, err
-	}
-	// 修饰键：与「方案切换键」同样的约束——只接受键盘键，鼠标键按住没有意义。
-	if mod := strings.TrimSpace(r.Mod); mod != "" {
-		vk, err := keys.Parse(mod)
-		if err != nil {
-			return nil, fmt.Errorf("%s 的修饰键无效：%v", where, err)
-		}
-		if keys.IsMouse(vk) {
-			return nil, fmt.Errorf("%s 的修饰键不支持鼠标键（%s），请改用键盘键", where, keys.Label(vk))
-		}
-		rule.ModVK = vk
 	}
 	return rule, nil
 }

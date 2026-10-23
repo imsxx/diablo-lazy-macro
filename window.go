@@ -131,9 +131,6 @@ type skillSlotData struct {
 	Name       string `json:"name"`
 	DefaultKey string `json:"defaultKey"`
 	Key        string `json:"key"`
-	// Mod 是发送该键时要同时按住的修饰键（键名，空表示不按）：
-	// 暗黑4 的强制站立 / 强制移动 / 强制交互都通过它表达。
-	Mod        string `json:"mod"`
 	Strategy   int    `json:"strategy"`
 	IntervalMS int    `json:"intervalMS"`
 	// 延迟区间：DelayMaxMS 是上界（正数在本周期内后延、负数推迟到周期末尾前，0 表示不延迟），
@@ -160,10 +157,7 @@ type frontendSlot struct {
 	Name     string `json:"name"`
 	Key      string `json:"key"`
 	KeyLabel string `json:"keyLabel"` // 界面显示名（中文），由 keyitems.go 统一给出
-	// Mod 是修饰键名（空表示不按），ModLabel 是它的显示名。
-	Mod         string `json:"mod"`
-	ModLabel    string `json:"modLabel"`
-	Strategy    int    `json:"strategy"`
+	Strategy int    `json:"strategy"`
 	IntervalMS  int    `json:"intervalMS"`
 	DelayMaxMS  int    `json:"delayMaxMS"`
 	DelayMinMS  int    `json:"delayMinMS"`
@@ -171,9 +165,12 @@ type frontendSlot struct {
 }
 
 type frontendProfile struct {
-	Name  string         `json:"name"`
-	Mode  string         `json:"mode"`
-	Slots []frontendSlot `json:"slots"`
+	Name string `json:"name"`
+	Mode string `json:"mode"`
+	// Holds 是「宏运行期间一直按住」的键名（强制站立 / 强制移动 / 强制交互）。
+	Holds      []string       `json:"holds"`
+	HoldLabels []string       `json:"holdLabels"`
+	Slots      []frontendSlot `json:"slots"`
 }
 
 type helperMeta struct {
@@ -260,6 +257,8 @@ type mainWindow struct {
 	profileSlots [maxProfiles][numSlots]skillSlotData
 	profileNames [maxProfiles]string
 	profileModes [maxProfiles]string
+	// profileHolds 是每个方案「宏运行期间一直按住」的键名（强制站立 / 移动 / 交互）。
+	profileHolds [maxProfiles][]string
 	profileCount int
 	startMode    int
 
@@ -569,7 +568,7 @@ func (w *mainWindow) initBindings() {
 		return nil
 	})
 
-	bind("api_updateSlot", func(tabIdx, slotIdx int, key, mod string, strategy, interval, delayMin, delayMax int) error {
+	bind("api_updateSlot", func(tabIdx, slotIdx int, key string, strategy, interval, delayMin, delayMax int) error {
 		if tabIdx < 0 || tabIdx >= w.profileCount || slotIdx < 0 || slotIdx >= numSlots {
 			return fmt.Errorf("槽位序号超出范围")
 		}
@@ -583,20 +582,9 @@ func (w *mainWindow) initBindings() {
 		if _, err := keys.Parse(key); err != nil {
 			return fmt.Errorf("槽位按键无效：%v", err)
 		}
-		mod = strings.ToUpper(strings.TrimSpace(mod))
-		if mod != "" {
-			vk, err := keys.Parse(mod)
-			if err != nil {
-				return fmt.Errorf("修饰键无效：%v", err)
-			}
-			if keys.IsMouse(vk) {
-				return fmt.Errorf("修饰键不支持鼠标键（%s），请改用键盘键", keyName(vk))
-			}
-		}
 		slot := &w.profileSlots[tabIdx][slotIdx]
 		prev := *slot
 		slot.Key = key
-		slot.Mod = mod
 		slot.Strategy = strategy
 		slot.IntervalMS = clampInterval(interval, prev.IntervalMS)
 		slot.DelayMaxMS = clampDelay(delayMax)
@@ -629,6 +617,34 @@ func (w *mainWindow) initBindings() {
 		})
 	})
 
+	// api_updateProfileHolds 设置「宏运行期间一直按住」的键（强制站立 / 移动 / 交互）。
+	// 空列表表示不按住；同一键重复会被去重，鼠标键直接拒绝（按住鼠标键会一直触发攻击）。
+	bind("api_updateProfileHolds", func(tabIdx int, holds []string) error {
+		if tabIdx < 0 || tabIdx >= w.profileCount {
+			return fmt.Errorf("方案序号 %d 超出范围", tabIdx)
+		}
+		clean := make([]string, 0, len(holds))
+		seen := map[string]bool{}
+		for _, h := range holds {
+			h = strings.ToUpper(strings.TrimSpace(h))
+			if h == "" || seen[h] {
+				continue
+			}
+			vk, err := keys.Parse(h)
+			if err != nil {
+				return fmt.Errorf("按住键无效：%v", err)
+			}
+			if keys.IsMouse(vk) {
+				return fmt.Errorf("按住键不支持鼠标键（%s）：按住会自动攻击，请改用键盘键", keyName(vk))
+			}
+			seen[h] = true
+			clean = append(clean, h)
+		}
+		prev := w.profileHolds[tabIdx]
+		w.profileHolds[tabIdx] = clean
+		return w.commitOrRollback(func() { w.profileHolds[tabIdx] = prev })
+	})
+
 	// api_addProfile 在方案列表末尾追加一个空白方案并切过去，返回新方案序号。
 	// 空白方案沿用默认键位但全部「禁用」，由玩家自己选策略；协议要求每方案至少 1 条规则，
 	// 落盘时由 slotsToProfile 兜底一条占位规则。
@@ -644,6 +660,7 @@ func (w *mainWindow) initBindings() {
 		w.profileSlots[idx] = defaultSlots()
 		w.profileNames[idx] = fmt.Sprintf("配置 %d", idx+1)
 		w.profileModes[idx] = config.ModeConcurrent
+		w.profileHolds[idx] = nil
 		w.profileCount = idx + 1
 		w.profileIdx = idx
 
@@ -676,6 +693,7 @@ func (w *mainWindow) initBindings() {
 			w.profileSlots[i] = w.profileSlots[i+1]
 			w.profileNames[i] = w.profileNames[i+1]
 			w.profileModes[i] = w.profileModes[i+1]
+			w.profileHolds[i] = w.profileHolds[i+1]
 		}
 		last := w.profileCount - 1
 		w.profileSlots[last] = defaultSlots()
@@ -1019,8 +1037,6 @@ func (w *mainWindow) buildFrontendState() *frontendState {
 				Name:        sd.Name,
 				Key:         sd.Key,
 				KeyLabel:    keyNameOfToken(sd.Key),
-				Mod:         sd.Mod,
-				ModLabel:    keyNameOfToken(sd.Mod),
 				Strategy:    sd.Strategy,
 				IntervalMS:  sd.IntervalMS,
 				DelayMaxMS:  sd.DelayMaxMS,
@@ -1028,10 +1044,16 @@ func (w *mainWindow) buildFrontendState() *frontendState {
 				Explanation: slotExplanation(sd),
 			}
 		}
+		holdLabels := make([]string, 0, len(w.profileHolds[t]))
+		for _, h := range w.profileHolds[t] {
+			holdLabels = append(holdLabels, keyNameOfToken(h))
+		}
 		s.Profiles[t] = frontendProfile{
-			Name:  w.profileNames[t],
-			Mode:  w.profileModes[t],
-			Slots: slots,
+			Name:       w.profileNames[t],
+			Mode:       w.profileModes[t],
+			Holds:      append([]string(nil), w.profileHolds[t]...),
+			HoldLabels: holdLabels,
+			Slots:      slots,
 		}
 	}
 
@@ -1158,6 +1180,7 @@ func (w *mainWindow) loadFromState() {
 			w.profileNames[i] = fmt.Sprintf("配置 %d", i+1)
 		}
 		w.profileModes[i] = p.Mode
+		w.profileHolds[i] = append([]string(nil), p.Holds...)
 	}
 
 	w.profileIdx = 0
@@ -1211,7 +1234,7 @@ func (w *mainWindow) saveToState() error {
 		if name == "" {
 			name = fmt.Sprintf("配置 %d", i+1)
 		}
-		profs[i] = slotsToProfile(w.profileSlots[i], name, w.profileModes[i])
+		profs[i] = slotsToProfile(w.profileSlots[i], name, w.profileModes[i], w.profileHolds[i])
 	}
 
 	w.raw.Version = config.Version
@@ -1287,7 +1310,7 @@ func (w *mainWindow) buildShareCode() (string, error) {
 		if name == "" {
 			name = fmt.Sprintf("配置 %d", i+1)
 		}
-		profs[i] = slotsToProfile(w.profileSlots[i], name, w.profileModes[i])
+		profs[i] = slotsToProfile(w.profileSlots[i], name, w.profileModes[i], w.profileHolds[i])
 	}
 	w.raw.Profiles = profs
 	return config.Encode(w.raw)
@@ -1324,7 +1347,7 @@ func profileToSlots(prof config.RawProfile) [numSlots]skillSlotData {
 
 		usedSlots[slotIdx] = true
 		slots[slotIdx].Key = targetKey
-		slots[slotIdx].Mod = r.Mod
+
 		if r.IntervalMS > 0 {
 			slots[slotIdx].IntervalMS = r.IntervalMS
 		}
@@ -1438,7 +1461,7 @@ func clampInt(v, lo, hi, fallback int) int {
 	return v
 }
 
-func slotsToProfile(slots [numSlots]skillSlotData, name string, mode string) config.RawProfile {
+func slotsToProfile(slots [numSlots]skillSlotData, name string, mode string, holds []string) config.RawProfile {
 	rules := make([]config.RawRule, 0, numSlots)
 
 	for _, s := range slots {
@@ -1451,14 +1474,12 @@ func slotsToProfile(slots [numSlots]skillSlotData, name string, mode string) con
 			rules = append(rules, config.RawRule{
 				Trigger:  "t",
 				Action:   "hold:" + s.Key,
-				Mod:      s.Mod,
 				Strategy: config.StrategyHold,
 			})
 		case strategySpam:
 			rule := config.RawRule{
 				Trigger:    "t",
 				Action:     "tap:" + s.Key,
-				Mod:        s.Mod,
 				IntervalMS: clampInterval(s.IntervalMS, 20),
 				Strategy:   config.StrategySpam,
 			}
@@ -1474,7 +1495,6 @@ func slotsToProfile(slots [numSlots]skillSlotData, name string, mode string) con
 			rules = append(rules, config.RawRule{
 				Trigger:    "t",
 				Action:     "tap:" + s.Key,
-				Mod:        s.Mod,
 				IntervalMS: clampInterval(s.IntervalMS, 300),
 				Strategy:   config.StrategyBuff,
 			})
@@ -1485,6 +1505,7 @@ func slotsToProfile(slots [numSlots]skillSlotData, name string, mode string) con
 	return config.RawProfile{
 		Name:  name,
 		Mode:  mode,
+		Holds: holds,
 		Rules: rules,
 	}
 }
