@@ -150,6 +150,8 @@ func newApp() (*app, error) {
 		os.Stderr = f
 		logger.Printf("标准错误已重定向到 logs/stderr.log")
 	}
+	// 栈溢出这类崩溃不走 Go 的 panic，需要 Windows 层的异常过滤器才抓得到。
+	win32.InstallCrashHandler(filepath.Join(dir, "logs", "crash.log"))
 	var ni *walk.NotifyIcon
 	if iconObj, err := walk.NewNotifyIcon(mw); err == nil {
 		ni = iconObj
@@ -212,6 +214,9 @@ func newApp() (*app, error) {
 
 func (a *app) run() int {
 	defer func() {
+		// 主循环返回 = 进程即将结束。这条日志是「这次到底怎么退出的」的唯一线索：
+		// 正常退出会先打「退出主程序」，只有这条说明窗口是被别的路径关掉的。
+		a.log.Printf("[退出] 消息循环结束，进程即将结束")
 		if a.hud != nil {
 			a.hud.destroy()
 		}

@@ -945,6 +945,7 @@ func (w *mainWindow) initBindings() {
 // requestQuit 是「关闭」的唯一入口：先让界面弹二次确认，确认后由 api_quit 真正退出。
 // 界面还没显示出来时直接退出——Alt+F4 不能变成「没反应」。
 func (w *mainWindow) requestQuit() {
+	w.app.log.Printf("[窗口] 收到关闭请求（开始二次确认）")
 	if w.quitting {
 		return
 	}
@@ -992,6 +993,7 @@ func wrapWithRecover(name string, fn interface{}, logf func(string, ...any)) int
 
 // hideToTray 把主窗口隐藏到托盘（首次隐藏给一次气泡提示）。
 func (w *mainWindow) hideToTray() {
+	w.app.log.Printf("[窗口] 隐藏到托盘（进程继续运行）")
 	procShowWindow.Call(w.hwnd, uintptr(SW_HIDE))
 	if w.hiddenHintShown {
 		return
