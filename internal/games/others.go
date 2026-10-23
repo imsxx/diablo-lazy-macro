@@ -35,7 +35,13 @@ const (
 	// 取 15% —— 比 D3keyHelper 的 5% 早一些，避免高攻速流派里条跑太快、补按还没落地就断了。
 	// 条完全消失（0%）时比例必然低于阈值，所以「断了必补」是这条判据的天然兜底。
 	d4BuffKeepRatio = 0.15
+
 )
+
+// d4BuffGuardReady 表示这套坐标是否已在实际使用的窗口比例上标定通过。
+// 未通过前不启用守卫：误判会直接表现为「某个技能永远不按」。
+// 用变量而非常量，便于测试临时打开验证判定逻辑。
+var d4BuffGuardReady = false
 
 type d4Adapter struct{}
 
@@ -68,6 +74,13 @@ func d4IsGreen(r, g, b uint8) bool {
 // 只剩不到 15% 时返回 false（引擎据此补按一次），条整个消失同样返回 false。
 // 这样既做到「快结束就续」，也保留「断了必补」的兜底。
 func (d4Adapter) BuffActive(hwnd uintptr, slotIdx int, px PixelSource) bool {
+	// 守卫暂时关闭：坐标只在 1920×1080 的标准 16:9 下量过，玩家把窗口拉成
+	// 1717×1053 这类非标准比例后条的位置对不上，守卫就会误判成「Buff 还在」，
+	// 永远不按该技能——表现为「这个键没动静」，比误按更糟。
+	// 标定完成后把 d4BuffGuardReady 改为 true 即可启用，下面的实现不用改。
+	if !d4BuffGuardReady {
+		return false
+	}
 	if px == nil || slotIdx < 0 || slotIdx >= d4SlotCount {
 		return false
 	}

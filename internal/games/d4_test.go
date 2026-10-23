@@ -27,7 +27,28 @@ func d4BarSpan(i int) (int32, int32) {
 	return int32(center - d4BuffBarWidth/2), int32(center + d4BuffBarWidth/2)
 }
 
+// 守卫默认关闭：坐标没在实际窗口比例上标定过，宁可每次都按，也不能误拦。
+func TestD4BuffGuardDisabledByDefault(t *testing.T) {
+	if d4BuffGuardReady {
+		t.Skip("守卫已启用，跳过默认关闭的断言")
+	}
+	x0, x1 := d4BarSpan(0)
+	px := stubD4Pixels{w: 1920, h: 1080, barY: 879, barX0: x0, barX1: x1}
+	if (d4Adapter{}).BuffActive(1, 0, px) {
+		t.Fatal("守卫关闭时必须恒返回 false，否则该技能会被永久跳过")
+	}
+}
+
+// withD4Guard 临时打开守卫，跑完恢复。
+func withD4Guard(t *testing.T) {
+	t.Helper()
+	old := d4BuffGuardReady
+	d4BuffGuardReady = true
+	t.Cleanup(func() { d4BuffGuardReady = old })
+}
+
 func TestD4BuffKeepsWhileBarMostlyFull(t *testing.T) {
+	withD4Guard(t)
 	x0, x1 := d4BarSpan(2)
 	px := stubD4Pixels{w: 1920, h: 1080, barY: 879, barX0: x0, barX1: x1}
 	if !(d4Adapter{}).BuffActive(1, 2, px) {
@@ -36,6 +57,7 @@ func TestD4BuffKeepsWhileBarMostlyFull(t *testing.T) {
 }
 
 func TestD4BuffRefreshesWhenBarNearlyGone(t *testing.T) {
+	withD4Guard(t)
 	x0, x1 := d4BarSpan(0)
 	// 只剩左侧 10%：应当补按（返回 false）。
 	px := stubD4Pixels{w: 1920, h: 1080, barY: 879, barX0: x0, barX1: x0 + (x1-x0)/10}
@@ -51,6 +73,7 @@ func TestD4BuffRefreshesWhenBarNearlyGone(t *testing.T) {
 }
 
 func TestD4BuffRefreshesWhenBarGone(t *testing.T) {
+	withD4Guard(t)
 	// 条完全消失（0%）也要补按：这就是「断了必补」的兜底。
 	px := stubD4Pixels{w: 1920, h: 1080, barY: 879, barX0: 0, barX1: 0}
 	if (d4Adapter{}).BuffActive(1, 0, px) {
@@ -59,6 +82,7 @@ func TestD4BuffRefreshesWhenBarGone(t *testing.T) {
 }
 
 func TestD4BuffScalesByWidth(t *testing.T) {
+	withD4Guard(t)
 	// 2205×1122 实测：条在 y≈1009（按宽度缩放），不是按高度缩放的 913。
 	scale := 2205.0 / d4RefWidth
 	y := int32(879 * scale)
