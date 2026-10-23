@@ -24,6 +24,22 @@ func (s stubD4Band) Pixel(x, y int32) (uint8, uint8, uint8, bool) {
 	return 40, 38, 36, true
 }
 
+func (s stubD4Band) Rect(x, y, w, h int32) ([]byte, bool) {
+	out := make([]byte, w*h*3)
+	for row := int32(0); row < h; row++ {
+		for i := int32(0); i < w; i++ {
+			p := (row*w + i) * 3
+			px, py := x+i, y+row
+			if py >= s.barY-1 && py <= s.barY+1 && px >= s.barX0 && px < s.barX1 {
+				out[p], out[p+1], out[p+2] = 66, 133, 45
+			} else {
+				out[p], out[p+1], out[p+2] = 40, 38, 36
+			}
+		}
+	}
+	return out, true
+}
+
 func (s stubD4Band) Band(x, y, width int32) ([]byte, bool) {
 	out := make([]byte, width*3)
 	for i := int32(0); i < width; i++ {
@@ -41,56 +57,94 @@ func (s stubD4Band) Band(x, y, width int32) ([]byte, bool) {
 func clearD4Cache() {
 	d4BarMu.Lock()
 	d4BarCache = map[[2]int32]d4BuffBarLayout{}
+	d4BarCalibrating = false
 	d4BarNextTry = time.Time{}
 	d4BarAttempts = 0
 	d4BarMu.Unlock()
 }
 
-// 标定只用「条宽 + 中轴对称」，所以给任意一段绿条都能推出 6 段位置。
-func TestD4CalibratesFromSingleBar(t *testing.T) {
+// 标定只用「条宽 + 中轴对称」，给任意一段绿条就能推出 6 段位置。
+func TestD4CalibrateFromSingleBar(t *testing.T) {
 	clearD4Cache()
-	// 1920×1080：把绿条放在第 1 段该在的位置（中心 = 960 - 2.5*43.5 ≈ 851）。
+	// 1920×1080：绿条放在第 1 段该在的位置（中心 = 960 - 2.5*43.5 ≈ 851，宽 39）。
 	px := stubD4Band{w: 1920, h: 1080, barY: 913, barX0: 832, barX1: 871}
+	layout, ok := calibrateD4Bar(1920, 1080, 0, 0, px)
+	if !ok {
+		t.Fatal("应当能标定成功")
+	}
+	if layout.x0[0] > 845 || layout.x1[0] < 858 {
+		t.Fatalf("第 1 段区间不合理：%d..%d", layout.x0[0], layout.x1[0])
+	}
+	if layout.y < 900 || layout.y > 925 {
+		t.Fatalf("条所在行不合理：%d", layout.y)
+	}
+}
+
+// 换尺寸（非 16:9）也能标定：只依赖「底部居中」。
+func TestD4CalibrateOnDifferentWindowSize(t *testing.T) {
+	clearD4Cache()
+	px := stubD4Band{w: 1717, h: 1053, barY: 890, barX0: 722, barX1: 757}
+	if _, ok := calibrateD4Bar(1717, 1053, 0, 0, px); !ok {
+		t.Fatal("非 16:9 窗口下也应能标定")
+	}
+}
+
+// 扫不到绿条：标定失败，守卫不启用（不会误拦）。
+func TestD4CalibrateFailsWithoutBar(t *testing.T) {
+	clearD4Cache()
+	px := stubD4Band{w: 1600, h: 900, barY: -1, barX0: 0, barX1: 0}
+	if _, ok := calibrateD4Bar(1600, 900, 0, 0, px); ok {
+		t.Fatal("没有绿条时不应标定成功")
+	}
+}
+
+// 命中缓存时按剩余比例判定：满条让路、条消失补按。
+func TestD4BuffActiveUsesCachedLayout(t *testing.T) {
+	clearD4Cache()
+	const w, h = 1920, 1080
+	px := stubD4Band{w: w, h: h, barY: 913, barX0: 832, barX1: 871}
+
+	// 手动写入缓存，模拟「标定已完成」。
+	layout := d4BuffBarLayout{y: 913}
+	step := 39 * d4StepPerBar
+	for i := 0; i < d4SlotCount; i++ {
+		center := float64(w)/2 + (float64(i)-2.5)*step
+		layout.x0[i] = int32(center - 19)
+		layout.x1[i] = int32(center + 19)
+	}
+	d4BarMu.Lock()
+	d4BarCache[[2]int32{w, h}] = layout
+	d4BarMu.Unlock()
+
 	if !(d4Adapter{}).BuffActive(1, 0, px) {
-		t.Fatal("按标定结果，第 1 槽应判为 Buff 生效")
+		t.Fatal("第 1 槽有条时应判为生效")
 	}
 	for _, i := range []int{1, 2, 3, 4, 5} {
 		if (d4Adapter{}).BuffActive(1, i, px) {
-			t.Errorf("第 %d 槽不该判为生效（那里没有绿条）", i+1)
+			t.Errorf("第 %d 槽没有绿条，不该判为生效", i+1)
 		}
 	}
 }
 
-// 换个窗口尺寸（非 16:9）也要能标定：只要 HUD 在底部居中即可。
-func TestD4CalibratesOnDifferentWindowSize(t *testing.T) {
+// 未标定时不得在调用线程里抓屏：d4Layout 必须立即返回 false 并转为后台标定。
+func TestD4LayoutNeverBlocks(t *testing.T) {
 	clearD4Cache()
-	// 1717×1053：条宽按比例缩小到约 35px，位置仍在中线左侧第一段。
-	px := stubD4Band{w: 1717, h: 1053, barY: 890, barX0: 722, barX1: 757}
-	if !(d4Adapter{}).BuffActive(1, 0, px) {
-		t.Fatal("非 16:9 窗口下也应能标定并命中")
+	px := stubD4Band{w: 1920, h: 1080, barY: 913, barX0: 832, barX1: 871}
+	start := time.Now()
+	if _, ok := d4Layout(1920, 1080, 0, 0, px); ok {
+		t.Fatal("第一次调用应返回未标定（标定在后台进行）")
 	}
-}
+	if elapsed := time.Since(start); elapsed > 20*time.Millisecond {
+		t.Fatalf("d4Layout 不应在调用线程抓屏，实际耗时 %v", elapsed)
+	}
 
-// 扫不到绿条时不缓存、也不误拦：返回 false，让引擎照常按。
-func TestD4NoBarMeansNoGuard(t *testing.T) {
-	clearD4Cache()
-	px := stubD4Band{w: 1600, h: 900, barY: -1, barX0: 0, barX1: 0}
-	for i := 0; i < 6; i++ {
-		if (d4Adapter{}).BuffActive(1, i, px) {
-			t.Fatalf("没有绿条时第 %d 槽必须返回 false，否则该技能永远不按", i+1)
+	// 后台标定完成后，再次调用应命中。
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if _, ok := d4Layout(1920, 1080, 0, 0, px); ok {
+			return
 		}
+		time.Sleep(20 * time.Millisecond)
 	}
-}
-
-// 缓存按客户区尺寸区分：尺寸变了必须重标，不能沿用旧坐标。
-func TestD4CacheIsKeyedBySize(t *testing.T) {
-	clearD4Cache()
-	small := stubD4Band{w: 1280, h: 720, barY: 600, barX0: 553, barX1: 581}
-	if !(d4Adapter{}).BuffActive(1, 0, small) {
-		t.Fatal("1280×720 下应能标定")
-	}
-	large := stubD4Band{w: 2560, h: 1440, barY: 1210, barX0: 1109, barX1: 1162}
-	if !(d4Adapter{}).BuffActive(1, 0, large) {
-		t.Fatal("2560×1440 下应重新标定并命中")
-	}
+	t.Fatal("后台标定没有在 2 秒内完成")
 }

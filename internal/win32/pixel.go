@@ -32,6 +32,24 @@ type POINT struct {
 // 不读游戏内存、不注入进程、不加载驱动。
 type Screen struct{}
 
+// Rect 一次取回屏幕上一块区域的像素（RGB 紧凑排列，长度 = 3*w*h）。
+// 自标定要在一个带状区域里找颜色，逐行抓屏要几十次、每次 5~6ms；
+// 整块抓一次只要一次 BitBlt，再在内存里统计，快一个数量级。
+func (Screen) Rect(x, y, w, h int32) ([]byte, bool) {
+	img, err := CaptureRect(x, y, w, h)
+	if err != nil || img == nil {
+		return nil, false
+	}
+	width, height := img.Rect.Dx(), img.Rect.Dy()
+	out := make([]byte, width*height*3)
+	for i := 0; i < width*height; i++ {
+		out[i*3] = img.Pix[i*4]
+		out[i*3+1] = img.Pix[i*4+1]
+		out[i*3+2] = img.Pix[i*4+2]
+	}
+	return out, true
+}
+
 // Band 一次取回屏幕上一行连续像素（RGB 顺序），供 Buff 条这类「按长度判定」的场景使用。
 // 复用 CaptureRect 的 BitBlt + GetDIBits：单点 GetPixel 在部分环境（远程桌面、DWM 合成）
 // 每次要数毫秒，扫一条 7 点就是几十毫秒，会直接把主循环拖到无响应；抓整行只要一次。

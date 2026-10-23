@@ -59,11 +59,13 @@ type d4BuffBarLayout struct {
 var (
 	d4BarMu    sync.Mutex
 	d4BarCache = map[[2]int32]d4BuffBarLayout{}
-	// 标定失败后的冷却：扫一次要几十毫秒（每次抓屏 5~6ms × 几十行），
-	// 若每 150ms 都重试，主循环会被拖到无响应，游戏/系统会直接结束进程。
-	// 因此失败后至少等 d4CalibrateRetry 再试，且整个进程最多尝试 d4CalibrateMax 次。
-	d4BarNextTry  time.Time
-	d4BarAttempts int
+	// 标定在后台 goroutine 里做：一次要扫几十行、每行一次抓屏（5~6ms），
+	// 合计几百毫秒。这个调用发生在引擎的锁内（Buff 判定），一旦同步执行，
+	// 主循环会长时间持锁 → 宏像是「只按了一次」、悬浮窗不刷新、
+	// 而界面线程改配置又要同一把锁 → 两边互相等，最后界面无响应被结束。
+	d4BarCalibrating bool
+	d4BarNextTry     time.Time
+	d4BarAttempts    int
 )
 
 const (
@@ -95,6 +97,12 @@ type BandSource interface {
 	Band(x, y, width int32) ([]byte, bool)
 }
 
+// RectSource 是 PixelSource 的另一个可选扩展：一次取回一块区域（RGB 紧凑排列，长度 = 3*w*h）。
+// 自标定优先用它——整个扫描带抓一次就够，比逐行抓几十次快一个数量级。
+type RectSource interface {
+	Rect(x, y, w, h int32) ([]byte, bool)
+}
+
 func d4IsGreen(r, g, b uint8) bool {
 	return g >= d4BuffGreenMin &&
 		int(g)-int(r) > d4BuffGreenOverR &&
@@ -116,7 +124,7 @@ func (d4Adapter) BuffActive(hwnd uintptr, slotIdx int, px PixelSource) bool {
 	if !ok {
 		return false
 	}
-	layout, ok := d4Layout(w, h, ox, oy, band)
+	layout, ok := d4Layout(w, h, ox, oy, px)
 	if !ok {
 		return false
 	}
@@ -138,30 +146,37 @@ func (d4Adapter) BuffActive(hwnd uintptr, slotIdx int, px PixelSource) bool {
 }
 
 // d4Layout 返回当前窗口尺寸下的标定结果；未标定过就标一次，失败不缓存（下次再试）。
-func d4Layout(w, h, ox, oy int32, band BandSource) (d4BuffBarLayout, bool) {
+// d4Layout 只读缓存，永不在这里抓屏。
+// 没有缓存时顺手在后台起一个标定任务，本次返回「未标定」——调用方照常按键，
+// 等标定完成后下一次判定自然就用上了。
+func d4Layout(w, h, ox, oy int32, px PixelSource) (d4BuffBarLayout, bool) {
 	key := [2]int32{w, h}
 	d4BarMu.Lock()
 	cached, hit := d4BarCache[key]
-	ready := time.Now().Before(d4BarNextTry) || d4BarAttempts >= d4CalibrateMax
-	d4BarMu.Unlock()
 	if hit {
+		d4BarMu.Unlock()
 		return cached, true
 	}
-	if ready {
+	if d4BarCalibrating || time.Now().Before(d4BarNextTry) || d4BarAttempts >= d4CalibrateMax {
+		d4BarMu.Unlock()
 		return d4BuffBarLayout{}, false
 	}
-
-	layout, ok := calibrateD4Bar(w, h, ox, oy, band)
-
-	d4BarMu.Lock()
-	d4BarAttempts++
-	if ok {
-		d4BarCache[key] = layout
-	} else {
-		d4BarNextTry = time.Now().Add(d4CalibrateRetry)
-	}
+	d4BarCalibrating = true
 	d4BarMu.Unlock()
-	return layout, ok
+
+	go func() {
+		layout, ok := calibrateD4Bar(w, h, ox, oy, px)
+		d4BarMu.Lock()
+		d4BarCalibrating = false
+		d4BarAttempts++
+		if ok {
+			d4BarCache[key] = layout
+		} else {
+			d4BarNextTry = time.Now().Add(d4CalibrateRetry)
+		}
+		d4BarMu.Unlock()
+	}()
+	return d4BuffBarLayout{}, false
 }
 
 // calibrateD4Bar 在「底部居中」的技能栏一带扫描绿色 Buff 条，得到行与 6 个槽位区间。
@@ -172,63 +187,56 @@ func d4Layout(w, h, ox, oy int32, band BandSource) (d4BuffBarLayout, bool) {
 //
 // 因此只要扫到任意一条绿条，就能用「宽度 + 中线」推出全部 6 段的位置，
 // 完全不需要知道游戏是按高度还是按宽度缩放 HUD。
-func calibrateD4Bar(w, h, ox, oy int32, band BandSource) (d4BuffBarLayout, bool) {
+func calibrateD4Bar(w, h, ox, oy int32, px PixelSource) (d4BuffBarLayout, bool) {
 	left := int32(float64(w) * d4ScanLeftRatio)
 	width := int32(float64(w) * (d4ScanRightRatio - d4ScanLeftRatio))
-	if width <= 0 {
-		return d4BuffBarLayout{}, false
-	}
 	top := int32(float64(h) * d4ScanTopRatio)
-	bottom := int32(float64(h) * d4ScanBottomRatio)
-
-	// 粗扫找行（步长 8px）：Buff 条本身有好几像素高，8px 足够命中，
-	// 而每次抓屏在本机要 5~6ms，步长翻倍就能把标定耗时砍半。
-	bestY, best := int32(-1), 0
-	for y := top; y < bottom; y += 8 {
-		data, ok := band.Band(left+ox, y+oy, width)
-		if !ok {
-			continue
-		}
-		if n := countD4Green(data); n > best {
-			best, bestY = n, y
-		}
-	}
-	if bestY < 0 || best < d4MinBarPixels {
-		return d4BuffBarLayout{}, false // 当时没有 Buff 条：等下次（引擎会先按一次技能）
-	}
-
-	// 精扫：在粗扫结果附近逐行确认，避免落在条的上下边缘。
-	row, found := int32(-1), 0
-	for y := bestY - 4; y <= bestY+4; y++ {
-		if y < top || y >= bottom {
-			continue
-		}
-		data, ok := band.Band(left+ox, y+oy, width)
-		if !ok {
-			continue
-		}
-		if n := countD4Green(data); n > found {
-			found, row = n, y
-		}
-	}
-	if row < 0 {
+	height := int32(float64(h) * (d4ScanBottomRatio - d4ScanTopRatio))
+	if width <= 0 || height <= 0 {
 		return d4BuffBarLayout{}, false
 	}
-
-	data, ok := band.Band(left+ox, row+oy, width)
+	// 一次抓整块扫描带：逐行抓屏要几十次、每次 5~6ms，整块只要一次。
+	rs, ok := px.(RectSource)
 	if !ok {
 		return d4BuffBarLayout{}, false
 	}
-	// 取最左一段绿条的宽度作为「条宽」。
+	buf, ok := rs.Rect(left+ox, top+oy, width, height)
+	if !ok || len(buf) < int(width*height*3) {
+		return d4BuffBarLayout{}, false
+	}
+
+	// 逐行数绿点，找条所在的那一行。
+	bestRow, best := -1, 0
+	stride := int(width) * 3
+	for row := int32(0); row < height; row++ {
+		base := int(row) * stride
+		n := 0
+		for i := 0; i < int(width); i++ {
+			p := base + i*3
+			if d4IsGreen(buf[p], buf[p+1], buf[p+2]) {
+				n++
+			}
+		}
+		if n > best {
+			best, bestRow = n, int(row)
+		}
+	}
+	if bestRow < 0 || best < d4MinBarPixels {
+		return d4BuffBarLayout{}, false // 当时没有 Buff 条：等下次（引擎会先按一次技能）
+	}
+	row := top + int32(bestRow)
+
+	// 在该行找最左一段绿条的宽度。
+	base := bestRow * stride
 	runStart, runEnd := -1, -1
-	for i := 0; i+2 < len(data); i += 3 {
-		green := d4IsGreen(data[i], data[i+1], data[i+2])
-		idx := int32(i / 3)
+	for i := 0; i < int(width); i++ {
+		p := base + i*3
+		green := d4IsGreen(buf[p], buf[p+1], buf[p+2])
 		if green && runStart < 0 {
-			runStart = int(idx)
+			runStart = i
 		}
 		if !green && runStart >= 0 && runEnd < 0 {
-			runEnd = int(idx) - 1
+			runEnd = i - 1
 			break
 		}
 	}
