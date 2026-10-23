@@ -243,11 +243,21 @@ func (a *app) quitApp() {
 }
 
 func (a *app) sync(f func()) {
+	// 这些回调跑在 WebView2 / walk 的消息线程上，panic 会直接带走整个进程，
+	// 且 GUI 没有控制台可看：统一兜住并写日志。
+	safe := func() {
+		defer func() {
+			if r := recover(); r != nil {
+				a.log.Printf("[崩溃] 界面回调异常：%v\n%s", r, debug.Stack())
+			}
+		}()
+		f()
+	}
 	if a.win != nil && a.win.wv != nil {
-		a.win.wv.Dispatch(f)
+		a.win.wv.Dispatch(safe)
 		return
 	}
-	a.mw.Synchronize(f)
+	a.mw.Synchronize(safe)
 }
 
 // owner 返回对话框应使用的宿主窗口。

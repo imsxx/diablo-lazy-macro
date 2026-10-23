@@ -51,6 +51,19 @@ func (d4Adapter) DefaultForceStandKey() string { return standardForceStandKey }
 // 与暗黑3 唯一的差别是这里尚未做完整实机回归，先按同一机制启用。
 func (d4Adapter) ForceStandKeys() []string { return []string{"LMB"} }
 
+// BandSource 是 PixelSource 的可选扩展：一次取回一行连续像素（RGB 紧凑排列，长度 = 3*width）。
+// 实现了它的像素源会被优先使用——单点 GetPixel 在部分环境要数毫秒，扫一条 Buff 条
+// 用单点要几十毫秒，会直接把主循环拖到无响应。
+type BandSource interface {
+	Band(x, y, width int32) ([]byte, bool)
+}
+
+func d4IsGreen(r, g, b uint8) bool {
+	return g >= d4BuffGreenMin &&
+		int(g)-int(r) > d4BuffGreenOverR &&
+		int(g)-int(b) > d4BuffGreenOverB
+}
+
 // BuffActive 采样技能槽上方的绿色持续时间条，按「剩余比例」判断是否还该让路：
 // 只剩不到 15% 时返回 false（引擎据此补按一次），条整个消失同样返回 false。
 // 这样既做到「快结束就续」，也保留「断了必补」的兜底。
@@ -68,9 +81,27 @@ func (d4Adapter) BuffActive(hwnd uintptr, slotIdx int, px PixelSource) bool {
 	y := int32(math.Round(d4BuffBarY*scale)) + oy
 	half := d4BuffBarWidth * scale / 2
 
-	// 整条扫一遍数绿色像素：比例与「条从哪端缩短」无关，比取固定点稳。
-	// 步长 6px（约 7 个点）：取色是本工具最贵的操作，7 点足够分辨 15% 阈值。
-	step := 6.0
+	// 优先一次抓整行（一次 BitBlt），拿完整条再算比例。
+	if band, ok := px.(BandSource); ok {
+		barWidth := int32(math.Round(2*half)) + 1
+		left := int32(math.Round(barCenter-half)) + ox
+		if data, ok := band.Band(left, y, barWidth); ok {
+			green, total := 0, 0
+			for i := 0; i+2 < len(data); i += 3 {
+				total++
+				if d4IsGreen(data[i], data[i+1], data[i+2]) {
+					green++
+				}
+			}
+			if total == 0 {
+				return false
+			}
+			return float64(green)/float64(total) >= d4BuffKeepRatio
+		}
+	}
+
+	// 回退：像素源不支持整行抓取时，按稀疏单点估算（约 7 点）。
+	const step = 6.0
 	green, total := 0, 0
 	for dx := -half; dx <= half; dx += step {
 		x := int32(math.Round(barCenter+dx)) + ox
@@ -79,7 +110,7 @@ func (d4Adapter) BuffActive(hwnd uintptr, slotIdx int, px PixelSource) bool {
 			continue
 		}
 		total++
-		if g >= d4BuffGreenMin && int(g)-int(r) > d4BuffGreenOverR && int(g)-int(b) > d4BuffGreenOverB {
+		if d4IsGreen(r, g, b) {
 			green++
 		}
 	}

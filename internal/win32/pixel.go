@@ -32,6 +32,24 @@ type POINT struct {
 // 不读游戏内存、不注入进程、不加载驱动。
 type Screen struct{}
 
+// Band 一次取回屏幕上一行连续像素（RGB 顺序），供 Buff 条这类「按长度判定」的场景使用。
+// 复用 CaptureRect 的 BitBlt + GetDIBits：单点 GetPixel 在部分环境（远程桌面、DWM 合成）
+// 每次要数毫秒，扫一条 7 点就是几十毫秒，会直接把主循环拖到无响应；抓整行只要一次。
+func (Screen) Band(x, y, width int32) ([]byte, bool) {
+	img, err := CaptureRect(x, y, width, 1)
+	if err != nil || img == nil || img.Rect.Dx() <= 0 {
+		return nil, false
+	}
+	n := img.Rect.Dx()
+	out := make([]byte, n*3)
+	for i := 0; i < n; i++ {
+		out[i*3] = img.Pix[i*4]
+		out[i*3+1] = img.Pix[i*4+1]
+		out[i*3+2] = img.Pix[i*4+2]
+	}
+	return out, true
+}
+
 // ClientRect 返回窗口客户区的宽高及左上角在屏幕上的绝对物理坐标。
 func (Screen) ClientRect(hwnd uintptr) (w, h, originX, originY int32, ok bool) {
 	w, h, originX, originY, err := GetWindowClientSizeAndOrigin(windows.Handle(hwnd))
