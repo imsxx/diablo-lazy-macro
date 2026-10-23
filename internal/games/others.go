@@ -14,19 +14,27 @@ const standardForceStandKey = "SHIFT"
 // 坐标基准 1920×1080（实测自游戏内截图）：
 //   - 条在 y=879 这一行（1080 高）
 //   - 6 条等距，第一条中心 x=877，步长 43.5，条宽约 39
-// 换算规则与暗黑3 一致：以窗口高度等比缩放，横坐标相对窗口中线换算。
+//
+// 缩放规则：实测 2205×1122（玩家随手拉的窗口）下条落在 y=1016，
+// 按高度等比算应是 913、按宽度等比算应是 1009 —— 接近后者，说明暗黑4 的 HUD 是
+// 按窗口宽度缩放的（与暗黑3 按高度缩放不同，所以这里不能复用 d3 的公式）。
 const (
 	d4SlotCount    = 6
 	d4RefWidth     = 1920.0
-	d4RefHeight    = 1080.0
 	d4BuffBarY     = 879.0
 	d4BuffBarFirst = 877.0
 	d4BuffBarStep  = 43.5
+	d4BuffBarWidth = 39.0
 
 	// 绿色判据：G 足够亮、且明显压过 R 与 B（实测条内平均 RGB 约 66/133/45）。
 	d4BuffGreenMin   = 95
 	d4BuffGreenOverR = 35
 	d4BuffGreenOverB = 35
+
+	// d4BuffKeepRatio 是「还剩多少条才继续让路」：低于该比例就补一次。
+	// 取 15% —— 比 D3keyHelper 的 5% 早一些，避免高攻速流派里条跑太快、补按还没落地就断了。
+	// 条完全消失（0%）时比例必然低于阈值，所以「断了必补」是这条判据的天然兜底。
+	d4BuffKeepRatio = 0.15
 )
 
 type d4Adapter struct{}
@@ -43,31 +51,40 @@ func (d4Adapter) DefaultForceStandKey() string { return standardForceStandKey }
 // 与暗黑3 唯一的差别是这里尚未做完整实机回归，先按同一机制启用。
 func (d4Adapter) ForceStandKeys() []string { return []string{"LMB"} }
 
-// BuffActive 采样技能槽上方的绿色持续时间条：条还在（还有绿色）就说明 Buff 仍生效。
+// BuffActive 采样技能槽上方的绿色持续时间条，按「剩余比例」判断是否还该让路：
+// 只剩不到 15% 时返回 false（引擎据此补按一次），条整个消失同样返回 false。
+// 这样既做到「快结束就续」，也保留「断了必补」的兜底。
 func (d4Adapter) BuffActive(hwnd uintptr, slotIdx int, px PixelSource) bool {
 	if px == nil || slotIdx < 0 || slotIdx >= d4SlotCount {
 		return false
 	}
-	w, h, ox, oy, ok := px.ClientRect(hwnd)
-	if !ok || w <= 0 || h <= 0 {
+	w, _, ox, oy, ok := px.ClientRect(hwnd)
+	if !ok || w <= 0 {
 		return false
 	}
-	scale := float64(h) / d4RefHeight
-	// 条随剩余时间从右向左缩短，所以取条中点偏左的三点：只要还有绿色就说明 Buff 未断。
+	scale := float64(w) / d4RefWidth
 	centerX := d4BuffBarFirst + d4BuffBarStep*float64(slotIdx)
+	barCenter := float64(w)/2 + (centerX-d4RefWidth/2)*scale
 	y := int32(math.Round(d4BuffBarY*scale)) + oy
-	for _, dx := range []float64{-14, -6, 0} {
-		// 横坐标相对窗口中线换算，再换算成屏幕绝对坐标（与暗黑3 的算法一致）。
-		x := int32(math.Round(float64(w)/2+(centerX-d4RefWidth/2+dx)*scale)) + ox
+	half := d4BuffBarWidth * scale / 2
+
+	// 整条扫一遍数绿色像素：比例与「条从哪端缩短」无关，比取固定点稳。
+	green, total := 0, 0
+	for dx := -half; dx <= half; dx += 2 {
+		x := int32(math.Round(barCenter+dx)) + ox
 		r, g, b, ok := px.Pixel(x, y)
 		if !ok {
 			continue
 		}
+		total++
 		if g >= d4BuffGreenMin && int(g)-int(r) > d4BuffGreenOverR && int(g)-int(b) > d4BuffGreenOverB {
-			return true
+			green++
 		}
 	}
-	return false
+	if total == 0 {
+		return false
+	}
+	return float64(green)/float64(total) >= d4BuffKeepRatio
 }
 
 // standardSlots 是暗黑3/4 通用的 6 技能槽默认定义。

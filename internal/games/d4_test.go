@@ -2,12 +2,12 @@ package games
 
 import "testing"
 
-// stubD4Pixels 只回答预先埋好的点，其余返回暗色（无 Buff）。
+// stubD4Pixels 只在一行、一段 x 区间内返回绿色（模拟剩余若干长度的 Buff 条），其余是暗色底。
 type stubD4Pixels struct {
-	w, h    int32
-	originX int32
-	originY int32
-	green   map[[2]int32]bool
+	w, h             int32
+	originX, originY int32
+	barY             int32
+	barX0, barX1     int32
 }
 
 func (s stubD4Pixels) ClientRect(uintptr) (int32, int32, int32, int32, bool) {
@@ -15,61 +15,66 @@ func (s stubD4Pixels) ClientRect(uintptr) (int32, int32, int32, int32, bool) {
 }
 
 func (s stubD4Pixels) Pixel(x, y int32) (uint8, uint8, uint8, bool) {
-	if s.green[[2]int32{x, y}] {
+	if y == s.barY && x >= s.barX0 && x < s.barX1 {
 		return 66, 133, 45, true // 实测条内平均色
 	}
-	return 40, 38, 36, true // 条底色（暗）
+	return 40, 38, 36, true // 条底色
 }
 
-// 1920×1080 下第 i 个技能条的采样点（与实现同一套换算）。
-func d4SampleX(i int, dx float64) int32 {
+// 1920×1080 基准下第 i 条第的左右端点（与实现同一套常量）。
+func d4BarSpan(i int) (int32, int32) {
 	center := d4BuffBarFirst + d4BuffBarStep*float64(i)
-	return int32(center + dx)
+	return int32(center - d4BuffBarWidth/2), int32(center + d4BuffBarWidth/2)
 }
 
-func TestD4BuffActiveDetectsGreenBar(t *testing.T) {
-	// 第 3 个槽位（索引 2）上方有条：只有它应当判为 Buff 生效。
-	green := map[[2]int32]bool{}
-	for _, dx := range []float64{-14, -6, 0} {
-		green[[2]int32{d4SampleX(2, dx), 879}] = true
-	}
-	px := stubD4Pixels{w: 1920, h: 1080, green: green}
-
+func TestD4BuffKeepsWhileBarMostlyFull(t *testing.T) {
+	x0, x1 := d4BarSpan(2)
+	px := stubD4Pixels{w: 1920, h: 1080, barY: 879, barX0: x0, barX1: x1}
 	if !(d4Adapter{}).BuffActive(1, 2, px) {
-		t.Fatal("第 3 槽应有 Buff")
-	}
-	for _, i := range []int{0, 1, 3, 4, 5} {
-		if (d4Adapter{}).BuffActive(1, i, px) {
-			t.Errorf("第 %d 槽不应判为有 Buff", i+1)
-		}
+		t.Fatal("满条应当继续让路（不补按）")
 	}
 }
 
-func TestD4BuffActiveIgnoresNonGreen(t *testing.T) {
-	// 条的位置上是暗色底：不应当判为 Buff 生效。
-	px := stubD4Pixels{w: 1920, h: 1080, green: map[[2]int32]bool{}}
+func TestD4BuffRefreshesWhenBarNearlyGone(t *testing.T) {
+	x0, x1 := d4BarSpan(0)
+	// 只剩左侧 10%：应当补按（返回 false）。
+	px := stubD4Pixels{w: 1920, h: 1080, barY: 879, barX0: x0, barX1: x0 + (x1-x0)/10}
 	if (d4Adapter{}).BuffActive(1, 0, px) {
-		t.Fatal("没有绿色条时不应判为 Buff 生效")
+		t.Fatal("条只剩 10% 时应当补按")
 	}
-}
 
-func TestD4BuffActiveScalesWithHeight(t *testing.T) {
-	// 2560×1440（scale=1.333…）：条应当在 879*1440/1080 ≈ 1172 这一行。
-	scale := 1440.0 / d4RefHeight
-	y := int32(879 * scale)
-	green := map[[2]int32]bool{}
-	for _, dx := range []float64{-14, -6, 0} {
-		x := int32(float64(2560)/2 + (d4BuffBarFirst+dx-d4RefWidth/2)*scale)
-		green[[2]int32{x, y}] = true
-	}
-	px := stubD4Pixels{w: 2560, h: 1440, green: green}
+	// 剩 30%：仍在阈值之上，继续让路。
+	px.barX1 = x0 + (x1-x0)*3/10
 	if !(d4Adapter{}).BuffActive(1, 0, px) {
-		t.Fatal("1440p 下应按高度等比换算后命中")
+		t.Fatal("条剩 30% 时不该补按")
 	}
 }
 
-func TestD4BuffActiveRejectsBadSlot(t *testing.T) {
-	px := stubD4Pixels{w: 1920, h: 1080, green: map[[2]int32]bool{}}
+func TestD4BuffRefreshesWhenBarGone(t *testing.T) {
+	// 条完全消失（0%）也要补按：这就是「断了必补」的兜底。
+	px := stubD4Pixels{w: 1920, h: 1080, barY: 879, barX0: 0, barX1: 0}
+	if (d4Adapter{}).BuffActive(1, 0, px) {
+		t.Fatal("条消失后必须返回 false，让引擎补按")
+	}
+}
+
+func TestD4BuffScalesByWidth(t *testing.T) {
+	// 2205×1122 实测：条在 y≈1009（按宽度缩放），不是按高度缩放的 913。
+	scale := 2205.0 / d4RefWidth
+	y := int32(879 * scale)
+	center := float64(2205)/2 + (d4BuffBarFirst-d4RefWidth/2)*scale
+	half := d4BuffBarWidth * scale / 2
+	px := stubD4Pixels{
+		w: 2205, h: 1122, barY: y,
+		barX0: int32(center-half) - 2, barX1: int32(center+half) + 2,
+	}
+	if !(d4Adapter{}).BuffActive(1, 0, px) {
+		t.Fatal("非 16:9 窗口下应按窗口宽度换算后命中")
+	}
+}
+
+func TestD4BuffRejectsBadSlot(t *testing.T) {
+	px := stubD4Pixels{w: 1920, h: 1080, barY: 879}
 	if (d4Adapter{}).BuffActive(1, -1, px) || (d4Adapter{}).BuffActive(1, 6, px) {
 		t.Fatal("越界槽位应返回 false")
 	}
