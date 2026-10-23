@@ -54,7 +54,8 @@ var (
 const (
 	hudClassName = "DLM_FloatingHUD"
 
-	hudBaseBarW   = 148
+	// 横条要放得下「技能宏运行中」这类完整文案：两字标签看不出含义，不能为了窄而牺牲可读性。
+	hudBaseBarW   = 232
 	hudBaseBarH   = 26
 	hudBaseBadgeW = 54
 	hudBaseBadgeH = 26
@@ -777,7 +778,7 @@ func (h *floatingHUD) paint(hwnd uintptr) {
 		// 状态文字
 		procSetTextColor.Call(memDC, uintptr(statusColor))
 		sTextW, _ := windows.UTF16PtrFromString(statusText)
-		rStatus := rect{Left: int32(dotCx + dotR + h.scale(4)), Top: 0, Right: int32(h.scale(62)), Bottom: int32(height)}
+		rStatus := rect{Left: int32(dotCx + dotR + h.scale(4)), Top: 0, Right: int32(h.scale(112)), Bottom: int32(height)}
 		procDrawTextW.Call(memDC, uintptr(unsafe.Pointer(sTextW)), ^uintptr(0), uintptr(unsafe.Pointer(&rStatus)), uintptr(DT_SINGLELINE|DT_VCENTER))
 
 		// 竖向分隔线

@@ -32,17 +32,19 @@ func engineStatusOf(eng *engine.Engine, foreground bool) engineStatus {
 	return statusReady
 }
 
-// engineStatusShort 是悬浮窗用的两字短标签。
+// engineStatusShort 是悬浮窗用的状态文案。
+// 刻意写长：悬浮窗是玩家唯一能随时看到的状态来源，「就绪 / 休眠」这类两字标签
+// 需要玩家自己去猜含义，反而增加认知负担。
 func engineStatusShort(st engineStatus) string {
 	switch st {
 	case statusRunning:
-		return "运行中"
+		return "技能宏运行中"
 	case statusPaused:
-		return "已暂停"
+		return "宏已暂停"
 	case statusDormant:
-		return "休眠"
+		return "游戏在后台"
 	default:
-		return "就绪"
+		return "按启停键启动"
 	}
 }
 
