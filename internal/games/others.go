@@ -69,8 +69,10 @@ func (d4Adapter) BuffActive(hwnd uintptr, slotIdx int, px PixelSource) bool {
 	half := d4BuffBarWidth * scale / 2
 
 	// 整条扫一遍数绿色像素：比例与「条从哪端缩短」无关，比取固定点稳。
+	// 步长 6px（约 7 个点）：取色是本工具最贵的操作，7 点足够分辨 15% 阈值。
+	step := 6.0
 	green, total := 0, 0
-	for dx := -half; dx <= half; dx += 2 {
+	for dx := -half; dx <= half; dx += step {
 		x := int32(math.Round(barCenter+dx)) + ox
 		r, g, b, ok := px.Pixel(x, y)
 		if !ok {

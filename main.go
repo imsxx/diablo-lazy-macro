@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
@@ -612,6 +613,13 @@ func (a *app) openDataDir() error {
 
 func (a *app) startTicker() {
 	go func() {
+		// GUI 程序没有控制台，主循环里一旦 panic，进程会静默消失、只留一条"已开启"的日志。
+		// 这里兜住并把堆栈写进日志，下次出问题能直接看到崩在哪一行。
+		defer func() {
+			if r := recover(); r != nil {
+				a.log.Printf("[崩溃] 主循环异常退出：%v\n%s", r, debug.Stack())
+			}
+		}()
 		timer := time.NewTimer(time.Millisecond)
 		defer timer.Stop()
 		var (

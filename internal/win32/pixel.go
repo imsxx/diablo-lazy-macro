@@ -4,6 +4,7 @@ package win32
 
 import (
 	"errors"
+	"sync"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -49,17 +50,31 @@ func (Screen) Pixel(x, y int32) (r, g, b uint8, ok bool) {
 	return r, g, b, true
 }
 
-// GetPixelColor 获取屏幕绝对物理坐标 (x, y) 的 RGB 颜色。
-// 基于标准 Win32 GDI API，单次耗时小于 0.05ms。
-func GetPixelColor(x, y int32) (r, g, b uint8, err error) {
-	hdc, _, _ := procGetDC.Call(0)
-	if hdc == 0 {
-		return 0, 0, 0, errors.New("GetDC failed")
-	}
-	defer procReleaseDC.Call(0, hdc)
+// 屏幕 DC 缓存：Buff 守卫每次判定要取十几个点，每次都 GetDC/ReleaseDC 在部分环境下
+// 单次可高达数毫秒（远程桌面、DWM 合成），足以把主循环拖到卡死。桌面 DC 可以长期持有。
+var (
+	screenDC   uintptr
+	screenDCMu sync.Mutex
+)
 
-	color, _, _ := procGetPixel.Call(hdc, uintptr(x), uintptr(y))
+// GetPixelColor 获取屏幕绝对物理坐标 (x, y) 的 RGB 颜色。
+// 基于标准 Win32 GDI API；屏幕 DC 复用，失败时丢弃缓存并重建。
+func GetPixelColor(x, y int32) (r, g, b uint8, err error) {
+	screenDCMu.Lock()
+	defer screenDCMu.Unlock()
+
+	if screenDC == 0 {
+		hdc, _, _ := procGetDC.Call(0)
+		if hdc == 0 {
+			return 0, 0, 0, errors.New("GetDC failed")
+		}
+		screenDC = hdc
+	}
+	color, _, _ := procGetPixel.Call(screenDC, uintptr(x), uintptr(y))
 	if color == 0xFFFFFFFF { // CLR_INVALID
+		// 分辨率/显示模式变化后旧 DC 会失效：丢掉缓存，下次重新获取。
+		procReleaseDC.Call(0, screenDC)
+		screenDC = 0
 		return 0, 0, 0, errors.New("GetPixel failed (CLR_INVALID)")
 	}
 	return uint8(color & 0xFF), uint8((color >> 8) & 0xFF), uint8((color >> 16) & 0xFF), nil

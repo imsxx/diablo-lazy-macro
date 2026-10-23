@@ -268,7 +268,20 @@ func (h *floatingHUD) initGDI() {
 	}
 }
 
-func hudWndProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
+func hudWndProc(hwnd uintptr, msg uint32, wp, lp uintptr) (ret uintptr) {
+	// 这是 Windows 回调，panic 会直接终止进程且没有任何可见输出：兜住并写日志。
+	defer func() {
+		if r := recover(); r != nil {
+			ret = 0
+			hudInstanceLock.Lock()
+			inst := hudInstance
+			hudInstanceLock.Unlock()
+			if inst != nil && inst.app != nil && inst.app.log != nil {
+				inst.app.log.Printf("[崩溃] 悬浮窗消息处理异常（msg=%d）：%v", msg, r)
+			}
+		}
+	}()
+
 	hudInstanceLock.Lock()
 	h := hudInstance
 	hudInstanceLock.Unlock()
