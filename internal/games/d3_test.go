@@ -180,18 +180,16 @@ func TestForceStandCapabilities(t *testing.T) {
 	if len(keys) != 1 || keys[0] != "LMB" {
 		t.Errorf("暗黑3 应对鼠标左键应用强制站立，实际 %v", keys)
 	}
-	// 其余游戏尚未实测，不擅自启用。
-	for _, id := range []string{"d4"} {
-		a, ok := For(id)
-		if !ok {
-			t.Fatalf("适配器 %s 未注册", id)
-		}
-		if got := a.ForceStandKeys(); len(got) != 0 {
-			t.Errorf("%s 尚未启用强制站立，应为空，实际 %v", id, got)
-		}
-		if a.DefaultForceStandKey() == "" {
-			t.Errorf("%s 应给出强制站立的默认键", id)
-		}
+	// 暗黑4 的机制相同（左键既是移动又是基础技能），默认原地站立键同样是 Shift，已在 2026-10-23 启用。
+	a, ok := For("d4")
+	if !ok {
+		t.Fatal("适配器 d4 未注册")
+	}
+	if got := a.ForceStandKeys(); len(got) != 1 || got[0] != "LMB" {
+		t.Errorf("暗黑4 应对鼠标左键应用强制站立，实际 %v", got)
+	}
+	if got := a.DefaultForceStandKey(); got != "SHIFT" {
+		t.Errorf("暗黑4 的强制站立默认键应为 SHIFT，实际 %q", got)
 	}
 }
 
