@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"runtime/debug"
 	"strconv"
@@ -141,6 +142,13 @@ func newApp() (*app, error) {
 	logger, err := logx.New(dir)
 	if err != nil {
 		return nil, err
+	}
+	// GUI 程序没有控制台：Go runtime 的致命错误（并发读写 map、nil 解引用、栈溢出）
+	// 默认只写 stderr，进程会直接消失且我们的日志里什么都看不到。
+	// 重定向到文件，崩溃后能拿到完整堆栈。
+	if f, ferr := os.OpenFile(filepath.Join(dir, "logs", "stderr.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); ferr == nil {
+		os.Stderr = f
+		logger.Printf("标准错误已重定向到 logs/stderr.log")
 	}
 	var ni *walk.NotifyIcon
 	if iconObj, err := walk.NewNotifyIcon(mw); err == nil {
@@ -298,28 +306,36 @@ func (a *app) confirmQuarantine(name string, loadErr error) {
 }
 
 func (a *app) loadGame(gameID string) error {
+	// 加载链路上每一步都留一行日志：之前「没有已加载日志」却看不出卡在哪，
+	// 只能靠猜；现在任何一步失败都能直接从日志定位。
+	a.log.Printf("[配置] 开始加载 %s", gameID)
 	target, err := a.settings.TargetProcess(gameID)
 	if err != nil {
+		a.log.Printf("[配置] 目标进程解析失败：%v", err)
 		return err
 	}
 	next := runtimeSnapshot{
 		GameID: gameID, TargetProcess: target,
 		SmartPause: a.settings.SmartPause,
-		Helpers: a.settings.Helpers,
+		Helpers:    a.settings.Helpers,
 	}
 
 	snap, err := store.Load(a.dir, store.ConfigFile(gameID))
 	if err != nil {
+		a.log.Printf("[配置] 读取存档失败：%v", err)
 		return err
 	}
 	if snap != nil {
 		raw := snap.Config
+		a.log.Printf("[配置] 读到存档：协议 v%d，%d 个方案", raw.Version, len(raw.Profiles))
 		parsed, err := config.Resolve(raw)
 		if err != nil {
+			a.log.Printf("[配置] 校验失败：%v", err)
 			return err
 		}
 		eng, err := engine.New(winSender{}, winKeyState{}, parsed, a.notifyEngineError)
 		if err != nil {
+			a.log.Printf("[配置] 创建引擎失败：%v", err)
 			return err
 		}
 		a.setupBuffChecker(eng)
@@ -331,12 +347,15 @@ func (a *app) loadGame(gameID string) error {
 		if err := eng.SetProfile(profIdx); err != nil {
 			return err
 		}
-		eng.SetEnabled(true)
+		// 启动时保持「停止」态：宏不该在玩家没按启停键之前就自己跑起来。
+		// 之前默认开启，导致玩家按启停键实际是「关掉」，悬浮窗随之显示待命，看起来像没生效。
+		eng.SetEnabled(false)
 		next.Engine = eng
 		next.Raw = &raw
 		next.ToggleVK = parsed.ToggleVK
 		next.StartMode = snap.StartMode
 	} else {
+		a.log.Printf("[配置] 没有存档，使用默认配置")
 		defRaw := defaultConfig()
 		defRaw.Game = gameID
 		parsed, err := config.Resolve(defRaw)
@@ -345,7 +364,7 @@ func (a *app) loadGame(gameID string) error {
 				a.setupBuffChecker(eng)
 				a.setupForceStand(eng)
 				_ = eng.SetProfile(0)
-				eng.SetEnabled(true)
+				eng.SetEnabled(false) // 同上：等玩家按启停键再开
 				next.Engine = eng
 				next.Raw = &defRaw
 				next.ToggleVK = parsed.ToggleVK

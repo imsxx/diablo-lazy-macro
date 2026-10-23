@@ -6,6 +6,8 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
+	"reflect"
+	"runtime/debug"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -491,7 +493,10 @@ func (w *mainWindow) subclass() {
 // 禁止出现「界面已经改了、磁盘却没写」的静默失败。
 func (w *mainWindow) initBindings() {
 	bind := func(name string, f interface{}) {
-		if err := w.wv.Bind(name, f); err != nil {
+		// 这些函数跑在 WebView2 的回调线程上：panic 会直接终止整个进程，
+		// 且没有任何界面提示。统一包一层 recover，至少把堆栈留下来。
+		wrapped := wrapWithRecover(name, f, w.app.log.Printf)
+		if err := w.wv.Bind(name, wrapped); err != nil {
 			// 注册失败会让前端拿不到接口（表现为界面点了没反应），必须留痕。
 			w.app.log.Printf("[界面] 注册接口 %s 失败：%v", name, err)
 		}
@@ -907,6 +912,39 @@ func (w *mainWindow) requestQuit() {
 	w.wv.Dispatch(func() {
 		w.wv.Eval("if(window.requestQuit){window.requestQuit()}else{window.api_quit&&window.api_quit()}")
 	})
+}
+
+// wrapWithRecover 给前端可调用的接口包一层 recover。
+// 这些回调由 WebView2 在它自己的线程上反射调用，panic 不会经过我们的任何 goroutine，
+// 表现就是「点一下界面，程序直接消失」。包住后至少把接口名与堆栈写进日志。
+// panic 时按原签名返回零值，并把 error 返回值填成可读信息（前端会弹提示条）。
+func wrapWithRecover(name string, fn interface{}, logf func(string, ...any)) interface{} {
+	v := reflect.ValueOf(fn)
+	t := v.Type()
+	if t.Kind() != reflect.Func {
+		return fn
+	}
+	errType := reflect.TypeOf((*error)(nil)).Elem()
+	return reflect.MakeFunc(t, func(args []reflect.Value) (out []reflect.Value) {
+		out = make([]reflect.Value, t.NumOut())
+		for i := range out {
+			out[i] = reflect.Zero(t.Out(i))
+		}
+		defer func() {
+			r := recover()
+			if r == nil {
+				return
+			}
+			logf("[崩溃] 接口 %s 异常：%v\n%s", name, r, debug.Stack())
+			for i := 0; i < t.NumOut(); i++ {
+				if t.Out(i) == errType {
+					err := fmt.Errorf("%s 内部异常：%v（详情见运行日志）", name, r)
+					out[i] = reflect.ValueOf(&err).Elem()
+				}
+			}
+		}()
+		return v.Call(args)
+	}).Interface()
 }
 
 // hideToTray 把主窗口隐藏到托盘（首次隐藏给一次气泡提示）。
