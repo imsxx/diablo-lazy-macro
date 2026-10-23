@@ -1,16 +1,16 @@
-# 分享码协议 v6
+# 分享码协议 v7
 
-> 状态：**v6 定稿**（2026-10-20）。这是「工具」内生成与消费的**唯一交换格式**：作者在工具内导出，玩家从剪贴板粘贴导入。任何一方放宽校验都属于缺陷。
+> 状态：**v7 定稿**（2026-10-23）。这是「工具」内生成与消费的**唯一交换格式**：作者在工具内导出，玩家从剪贴板粘贴导入。任何一方放宽校验都属于缺陷。
 > **开发阶段只支持 v6**：没有发布、没有外部用户，因此不提供旧版本兼容层——`v` 不是 6 的分享码直接拒绝，请用当前工具重新导出（AGENTS 第六节）。
 > 设计取向：**配置门槛优先**。宏按轮循环触发，玩家不需要理解「重复次数」「优先级」这类内部机制——协议刻意不提供它们；反之，**玩家能直接感知的行为差异（如按键是顺序轮还是各自独立触发）才暴露**。
 
 ## 形式
 
 ```
-DLM6:eyJ2Ijo2LCJnIjoiZDMiLCJuIjoi5pqX6buRMyDpgJ_liLciLCJhIjoi5p-QQkTkvZzogIUiLCJ0ZyI6IlgxIiwicCI6W3sibiI6IumAn-WItyIsIm0iOiJzZXEiLCJyIjpbeyJ0ZyI6InQiLCJhIjoidGFwOjIiLCJpIjozMDAsInN0IjozfSx7InRnIjoidCIsImEiOiJob2xkOlJNQiJ9LHsidGciOiJ0IiwiYSI6InRhcDoxIiwiaSI6MTUwLCJzdCI6MiwiZCI6NDAsImRuIjoyfV19LHsibiI6IuaCrOi1jyIsInIiOltdfV19
+DLM7:eyJ2Ijo3LCJnIjoiZDMiLCJuIjoi5pqX6buRMyDpgJ_liLciLCJhIjoi5p-QQkTkvZzogIUiLCJ0ZyI6IlgxIiwicCI6W3sibiI6IumAn-WItyIsIm0iOiJzZXEiLCJyIjpbeyJ0ZyI6InQiLCJhIjoidGFwOjIiLCJpIjozMDAsInN0IjozLCJtb2QiOiJTSElGVCJ9LHsidGciOiJ0IiwiYSI6ImhvbGQ6Uk1CIn0seyJ0ZyI6InQiLCJhIjoidGFwOjEiLCJpIjoxNTAsInN0IjoyLCJkIjo0MCwiZG4iOjJ9XX0seyJuIjoi5oKs6LWPIiwiciI6bnVsbH1dfQ
 ```
 
-- `DLM<版本>:` 为前缀（字母大小写不敏感）；v6 工具接受 `DLM1`–`DLM6`，前缀声明的版本必须与正文 `v` 一致
+- `DLM<版本>:` 为前缀（字母大小写不敏感）；v7 工具只接受 `DLM7`，前缀声明的版本必须与正文 `v` 一致
 - 其后是 **base64url 编码**（RFC 4648 §5，无 `=` 填充）的紧凑 JSON
 - 解析前先去掉前缀、剥离所有空白字符（换行/空格/制表符），因此聊天工具里被折行的码也能直接使用
 - 正文不含任何可执行内容；工具只读取白名单字段，绝不 eval
@@ -97,7 +97,7 @@ DLM6:eyJ2Ijo2LCJnIjoiZDMiLCJuIjoi5pqX6buRMyDpgJ_liLciLCJhIjoi5p-QQkTkvZzogIUiLCJ
 ## 示例
 
 ```
-DLM6:eyJ2Ijo2LCJnIjoiZDMiLCJuIjoi5pqX6buRMyDpgJ_liLciLCJhIjoi5p-QQkTkvZzogIUiLCJ0ZyI6IlgxIiwicCI6W3sibiI6IumAn-WItyIsIm0iOiJzZXEiLCJyIjpbeyJ0ZyI6InQiLCJhIjoidGFwOjIiLCJpIjozMDAsInN0IjozfSx7InRnIjoidCIsImEiOiJob2xkOlJNQiJ9LHsidGciOiJ0IiwiYSI6InRhcDoxIiwiaSI6MTUwLCJzdCI6MiwiZCI6NDAsImRuIjoyfV19LHsibiI6IuaCrOi1jyIsInIiOltdfV19
+DLM7:eyJ2Ijo3LCJnIjoiZDMiLCJuIjoi5pqX6buRMyDpgJ_liLciLCJhIjoi5p-QQkTkvZzogIUiLCJ0ZyI6IlgxIiwicCI6W3sibiI6IumAn-WItyIsIm0iOiJzZXEiLCJyIjpbeyJ0ZyI6InQiLCJhIjoidGFwOjIiLCJpIjozMDAsInN0IjozLCJtb2QiOiJTSElGVCJ9LHsidGciOiJ0IiwiYSI6ImhvbGQ6Uk1CIn0seyJ0ZyI6InQiLCJhIjoidGFwOjEiLCJpIjoxNTAsInN0IjoyLCJkIjo0MCwiZG4iOjJ9XX0seyJuIjoi5oKs6LWPIiwiciI6bnVsbH1dfQ
 ```
 
 解码后等价于：
@@ -112,7 +112,7 @@ DLM6:eyJ2Ijo2LCJnIjoiZDMiLCJuIjoi5pqX6buRMyDpgJ_liLciLCJhIjoi5p-QQkTkvZzogIUiLCJ
 
 工具解析时必须逐项校验；任何一条不满足即**整段拒绝**、给出明确错误，禁止部分应用、跳过非法项或静默降级：
 
-1. 前缀必须是 `DLM1`–`DLM6`（大小写不敏感），整码 ≤ 4096 字符；前缀声明版本必须与正文 `v` 一致，且 `v ∈ [1, 6]`
+1. 前缀必须是 `DLM7`（大小写不敏感），整码 ≤ 4096 字符；前缀声明版本必须与正文 `v` 一致，且 `v == 7`
 2. 正文必须能按 base64url 解码（容忍 `=` 填充与空白字符），解码后 ≤ 3000 字节且为合法 UTF-8
 3. JSON 必须能解析、**无未知字段**、无多余尾巴
 4. `v` 必须在支持范围内（不匹配直接拒绝并提示升级）；`g` 若出现必须在 `d4` / `d3` 之内

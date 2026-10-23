@@ -8,9 +8,9 @@ import (
 	"testing"
 )
 
-// docExampleV6 是 docs/share-code.md 中的示例码（当前唯一支持的版本）：必须始终可解析。
+// docExampleV7 是 docs/share-code.md 中的示例码（当前唯一支持的版本）：必须始终可解析。
 // 第三个规则展示延迟区间（d=40 / dn=2），第二个方案是空方案。
-const docExampleV6 = `DLM6:eyJ2Ijo2LCJnIjoiZDMiLCJuIjoi5pqX6buRMyDpgJ_liLciLCJhIjoi5p-QQkTkvZzogIUiLCJ0ZyI6IlgxIiwicCI6W3sibiI6IumAn-WItyIsIm0iOiJzZXEiLCJyIjpbeyJ0ZyI6InQiLCJhIjoidGFwOjIiLCJpIjozMDAsInN0IjozfSx7InRnIjoidCIsImEiOiJob2xkOlJNQiJ9LHsidGciOiJ0IiwiYSI6InRhcDoxIiwiaSI6MTUwLCJzdCI6MiwiZCI6NDAsImRuIjoyfV19LHsibiI6IuaCrOi1jyIsInIiOltdfV19`
+const docExampleV7 = `DLM7:eyJ2Ijo3LCJnIjoiZDMiLCJuIjoi5pqX6buRMyDpgJ_liLciLCJhIjoi5p-QQkTkvZzogIUiLCJ0ZyI6IlgxIiwicCI6W3sibiI6IumAn-WItyIsIm0iOiJzZXEiLCJyIjpbeyJ0ZyI6InQiLCJhIjoidGFwOjIiLCJpIjozMDAsInN0IjozLCJtb2QiOiJTSElGVCJ9LHsidGciOiJ0IiwiYSI6ImhvbGQ6Uk1CIn0seyJ0ZyI6InQiLCJhIjoidGFwOjEiLCJpIjoxNTAsInN0IjoyLCJkIjo0MCwiZG4iOjJ9XX0seyJuIjoi5oKs6LWPIiwiciI6bnVsbH1dfQ`
 
 func mustParse(t *testing.T, code string) *Parsed {
 	t.Helper()
@@ -23,7 +23,7 @@ func mustParse(t *testing.T, code string) *Parsed {
 
 // 旧版本码没有兼容义务：直接拒绝，并提示用新版重新导出。
 func TestParseRejectsOldVersion(t *testing.T) {
-	payload := strings.TrimPrefix(docExampleV6, Prefix)
+	payload := strings.TrimPrefix(docExampleV7, Prefix)
 	for _, prefix := range []string{"DLM1:", "DLM3:", "DLM5:"} {
 		if _, err := Parse(prefix + payload); err == nil {
 			t.Errorf("%s 前缀的旧码应当被拒绝", prefix)
@@ -34,12 +34,12 @@ func TestParseRejectsOldVersion(t *testing.T) {
 func TestToggleKeyDefaultsToMouseSideButton(t *testing.T) {
 	// 缺省启停键为鼠标侧键 1：暗黑3/4 的默认键位都不占用鼠标额外按键
 	// （暗黑3 的 F1 是「收藏」，Shift 两款都是「强制站立」）。
-	p := mustParse(t, codeFromJSON(`{"v":6,"p":[{"r":[{"tg":"t","a":"tap:1","i":100}]}]}`))
+	p := mustParse(t, codeFromJSON(`{"v":7,"p":[{"r":[{"tg":"t","a":"tap:1","i":100}]}]}`))
 	if p.ToggleVK != 0x05 {
 		t.Fatalf("缺省启停键应为 X1(0x05)，实际 0x%02X", p.ToggleVK)
 	}
 	// 显式使用鼠标键作为启停键应当被接受。
-	p2 := mustParse(t, codeFromJSON(`{"v":6,"tg":"X2","p":[{"r":[{"tg":"t","a":"tap:1","i":100}]}]}`))
+	p2 := mustParse(t, codeFromJSON(`{"v":7,"tg":"X2","p":[{"r":[{"tg":"t","a":"tap:1","i":100}]}]}`))
 	if p2.ToggleVK != 0x06 {
 		t.Fatalf("鼠标键作为启停键应被接受，实际 0x%02X", p2.ToggleVK)
 	}
@@ -47,7 +47,7 @@ func TestToggleKeyDefaultsToMouseSideButton(t *testing.T) {
 
 func TestParseRejectsInvalidMode(t *testing.T) {
 	valid := `{"tg":"t","a":"tap:1","i":100}`
-	code := codeFromJSON(`{"v":6,"p":[{"m":"round","r":[` + valid + `]}]}`)
+	code := codeFromJSON(`{"v":7,"p":[{"m":"round","r":[` + valid + `]}]}`)
 	if _, err := Parse(code); err == nil {
 		t.Fatal("非法触发模式应当报错")
 	}
@@ -71,8 +71,8 @@ func TestDocExampleMatchesMarkdown(t *testing.T) {
 	if found == "" {
 		t.Fatalf("docs/share-code.md 里没有以 %s 开头的示例码", Prefix)
 	}
-	if found != docExampleV6 {
-		t.Fatalf("文档示例码与测试常量不一致（文档 %d 字符 / 常量 %d 字符）", len(found), len(docExampleV6))
+	if found != docExampleV7 {
+		t.Fatalf("文档示例码与测试常量不一致（文档 %d 字符 / 常量 %d 字符）", len(found), len(docExampleV7))
 	}
 	if _, err := Parse(found); err != nil {
 		t.Fatalf("文档示例码不可解析：%v", err)
@@ -81,7 +81,7 @@ func TestDocExampleMatchesMarkdown(t *testing.T) {
 
 // TestParseDocExampleV6 守护 v6 示例码：延迟区间与空方案。
 func TestParseDocExampleV6(t *testing.T) {
-	p := mustParse(t, docExampleV6)
+	p := mustParse(t, docExampleV7)
 	if p.Game != "d3" || len(p.Profiles) != 2 {
 		t.Fatalf("v5 示例基础字段解析错误：%+v", p)
 	}
@@ -99,15 +99,15 @@ func TestParseDocExampleV6(t *testing.T) {
 
 // 空方案（0 条规则）在 v4 起合法：玩家新增的配置在填好技能前不该按任何键。
 func TestParseAllowsEmptyProfile(t *testing.T) {
-	p := mustParse(t, codeFromJSON(`{"v":6,"p":[{"r":[]},{"n":"有规则","r":[{"tg":"t","a":"tap:1","i":100}]}]}`))
+	p := mustParse(t, codeFromJSON(`{"v":7,"p":[{"r":[]},{"n":"有规则","r":[{"tg":"t","a":"tap:1","i":100}]}]}`))
 	if len(p.Profiles) != 2 || len(p.Profiles[0].Rules) != 0 || len(p.Profiles[1].Rules) != 1 {
 		t.Fatalf("空方案解析错误：%+v", p.Profiles)
 	}
 }
 
 func TestParseToleratesWhitespacePrefixCaseAndPadding(t *testing.T) {
-	payload := strings.TrimPrefix(docExampleV6, Prefix)
-	messy := "dlm6:" + payload[:20] + "\n\t " + payload[20:] + "=="
+	payload := strings.TrimPrefix(docExampleV7, Prefix)
+	messy := "dlm7:" + payload[:20] + "\n\t " + payload[20:] + "=="
 	p := mustParse(t, messy)
 	if len(p.Profiles) != 2 || len(p.Profiles[0].Rules) != 3 {
 		t.Fatalf("容错解析结果错误：%+v", p)
@@ -123,26 +123,26 @@ func TestParseRejectsInvalid(t *testing.T) {
 	nine := strings.TrimSuffix(strings.Repeat(valid+",", 9), ",")
 	cases := map[string]string{
 		"空码":        "",
-		"前缀错误":      "D4LM6:" + strings.TrimPrefix(docExampleV6, Prefix),
-		"前缀版本非数字":   "DLMX:" + strings.TrimPrefix(docExampleV6, Prefix),
+		"前缀错误":      "D4LM6:" + strings.TrimPrefix(docExampleV7, Prefix),
+		"前缀版本非数字":   "DLMX:" + strings.TrimPrefix(docExampleV7, Prefix),
 		"版本超出支持":    "DLM9:" + base64.RawURLEncoding.EncodeToString([]byte(`{"v":9,"p":[{"r":[`+valid+`]}]}`)),
 		"前缀与正文版本不一致": "DLM6:" + base64.RawURLEncoding.EncodeToString([]byte(`{"v":5,"p":[{"r":[`+valid+`]}]}`)),
 		"非 Base64": Prefix + "不是base64!!",
-		"游戏标识非法":   codeFromJSON(`{"v":6,"g":"d5","p":[{"r":[` + valid + `]}]}`),
-		"未知字段":     codeFromJSON(`{"v":6,"x":1,"p":[{"r":[` + valid + `]}]}`),
-		"没有方案":     codeFromJSON(`{"v":6,"p":[]}`),
-		"规则过多":     codeFromJSON(`{"v":6,"p":[{"r":[` + nine + `]}]}`),
-		"间隔过小":     codeFromJSON(`{"v":6,"p":[{"r":[{"tg":"t","a":"tap:1","i":0}]}]}`),
-		"间隔缺失":     codeFromJSON(`{"v":6,"p":[{"r":[{"tg":"t","a":"tap:1"}]}]}`),
-		"单点带间隔":    codeFromJSON(`{"v":6,"p":[{"r":[{"tg":"t","a":"once:1","i":100}]}]}`),
-		"按键名非法":    codeFromJSON(`{"v":6,"p":[{"r":[{"tg":"t","a":"tap:ZZ","i":100}]}]}`),
-		"序列过长":     codeFromJSON(`{"v":6,"p":[{"r":[{"tg":"t","a":"seq:1,2,3,4,5,6,7","i":100}]}]}`),
-		"触发方式非法":   codeFromJSON(`{"v":6,"p":[{"r":[{"tg":"x","a":"tap:1","i":100}]}]}`),
-		"触发键非法":    codeFromJSON(`{"v":6,"p":[{"r":[{"tg":"h:??","a":"tap:1","i":100}]}]}`),
+		"游戏标识非法":   codeFromJSON(`{"v":7,"g":"d5","p":[{"r":[` + valid + `]}]}`),
+		"未知字段":     codeFromJSON(`{"v":7,"x":1,"p":[{"r":[` + valid + `]}]}`),
+		"没有方案":     codeFromJSON(`{"v":7,"p":[]}`),
+		"规则过多":     codeFromJSON(`{"v":7,"p":[{"r":[` + nine + `]}]}`),
+		"间隔过小":     codeFromJSON(`{"v":7,"p":[{"r":[{"tg":"t","a":"tap:1","i":0}]}]}`),
+		"间隔缺失":     codeFromJSON(`{"v":7,"p":[{"r":[{"tg":"t","a":"tap:1"}]}]}`),
+		"单点带间隔":    codeFromJSON(`{"v":7,"p":[{"r":[{"tg":"t","a":"once:1","i":100}]}]}`),
+		"按键名非法":    codeFromJSON(`{"v":7,"p":[{"r":[{"tg":"t","a":"tap:ZZ","i":100}]}]}`),
+		"序列过长":     codeFromJSON(`{"v":7,"p":[{"r":[{"tg":"t","a":"seq:1,2,3,4,5,6,7","i":100}]}]}`),
+		"触发方式非法":   codeFromJSON(`{"v":7,"p":[{"r":[{"tg":"x","a":"tap:1","i":100}]}]}`),
+		"触发键非法":    codeFromJSON(`{"v":7,"p":[{"r":[{"tg":"h:??","a":"tap:1","i":100}]}]}`),
 
-		"名称过长":     codeFromJSON(`{"v":6,"n":"` + strings.Repeat("长", 25) + `","p":[{"r":[` + valid + `]}]}`),
-		"JSON 有尾巴":  codeFromJSON(`{"v":6,"p":[{"r":[` + valid + `]}]}{}`),
-		"JSON 未闭合":  codeFromJSON(`{"v":6,"p":[{"r":[` + valid),
+		"名称过长":     codeFromJSON(`{"v":7,"n":"` + strings.Repeat("长", 25) + `","p":[{"r":[` + valid + `]}]}`),
+		"JSON 有尾巴":  codeFromJSON(`{"v":7,"p":[{"r":[` + valid + `]}]}{}`),
+		"JSON 未闭合":  codeFromJSON(`{"v":7,"p":[{"r":[` + valid),
 	}
 	for name, code := range cases {
 		if _, err := Parse(code); err == nil {
@@ -152,7 +152,7 @@ func TestParseRejectsInvalid(t *testing.T) {
 }
 
 func TestParseV2TuningFields(t *testing.T) {
-	js := `{"v":6,"p":[{"r":[` +
+	js := `{"v":7,"p":[{"r":[` +
 		`{"tg":"t","a":"tap:2","i":300,"st":3},` +
 		`{"tg":"t","a":"tap:1","i":1000,"st":2,"d":-40,"dn":40},` +
 		`{"tg":"t","a":"hold:RMB","st":1}]}]}`
@@ -191,7 +191,7 @@ func TestParseRejectsInvalidTuning(t *testing.T) {
 		"已回收字段 pr":  `{"tg":"t","a":"tap:1","i":100,"st":3,"pr":1}`,
 	}
 	for name, rule := range cases {
-		code := codeFromJSON(`{"v":6,"p":[{"r":[` + rule + `]}]}`)
+		code := codeFromJSON(`{"v":7,"p":[{"r":[` + rule + `]}]}`)
 		if _, err := Parse(code); err == nil {
 			t.Errorf("%s：应当报错但没有", name)
 		}
@@ -250,7 +250,7 @@ func TestEncodeRejectsInvalid(t *testing.T) {
 }
 
 func TestParseTwoProfileFixture(t *testing.T) {
-	code := codeFromJSON(`{"v":6,"n":"多方案测试","tg":"F1","p":[` +
+	code := codeFromJSON(`{"v":7,"n":"多方案测试","tg":"F1","p":[` +
 		`{"n":"速刷","r":[{"tg":"t","a":"tap:4","i":250},{"tg":"h:X1","a":"seq:2,3","i":200}]},` +
 		`{"n":"攻坚","r":[{"tg":"t","a":"hold:RMB"},{"tg":"h:X2","a":"once:1"}]}]}`)
 	p := mustParse(t, code)

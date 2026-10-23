@@ -39,6 +39,10 @@ type GameKeys struct {
 	ForceStandEnabled bool `json:"force_stand_enabled,omitempty"`
 	// ForceStandKey 强制站立键的协议键名；留空表示使用该游戏适配器给出的默认值。
 	ForceStandKey string `json:"force_stand_key,omitempty"`
+	// ForceMoveKey / ForceInteractKey 是「强制移动 / 强制交互」键（本机设置，不进分享码）。
+	// 暗黑4 的强制移动默认未绑定，所以默认留空；强制交互默认 F。
+	ForceMoveKey     string `json:"force_move_key,omitempty"`
+	ForceInteractKey string `json:"force_interact_key,omitempty"`
 }
 
 // 助手功能的默认值与取值范围。

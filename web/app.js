@@ -247,6 +247,18 @@ function renderTabs() {
   container.innerHTML = parts.join('');
 }
 
+// modOptions 生成「修饰」下拉：值存键名，界面显示中文名。
+// 强制移动在暗黑4 里默认未绑定，没配就不出现在列表里。
+function modOptions(current) {
+  const mk = (state && state.modKeys) || {};
+  const items = [['', '无']];
+  if (mk.stand) items.push([mk.stand, '站立']);
+  if (mk.move) items.push([mk.move, '移动']);
+  if (mk.interact) items.push([mk.interact, '交互']);
+  return items.map(([value, label]) =>
+    `<option value="${value}"${value === (current || '') ? ' selected' : ''}>${label}</option>`).join('');
+}
+
 function renderSlots() {
   const container = $id('slotList');
   if (!container) return;
@@ -290,6 +302,10 @@ function renderSlots() {
       <span class="col-key">
         <button class="keycap-btn sm" data-slot="${idx}" data-field="key"
           title="当前：${esc(slot.keyLabel || '未选择')} · 点击后按任意键录入（Esc 取消）">${esc(slot.keyLabel || '—')}</button>
+      </span>
+      <span class="col-mod">
+        <select class="select-dropdown xs" data-slot="${idx}" data-field="mod"
+          title="发送这个技能时同时按住的修饰键：站立 / 移动 / 交互（对应暗黑4 的强制站立 / 强制移动 / 强制交互）">${modOptions(slot.mod)}</select>
       </span>
       <span class="col-strategy">
         <select class="select-dropdown md" data-slot="${idx}" data-field="strategy"
@@ -599,12 +615,16 @@ function bindSlotsDelegation() {
     if (!slot) return;
 
     let key = slot.key;
+    let mod = slot.mod || '';
     let strategy = slot.strategy;
     let interval = slot.intervalMS;
     let delayMin = slot.delayMinMS;
     let delayMax = slot.delayMaxMS;
 
     switch (el.dataset.field) {
+      case 'mod':
+        mod = el.value;
+        break;
       case 'strategy':
         strategy = parseInt(el.value, 10) || 0;
         break;
@@ -631,7 +651,7 @@ function bindSlotsDelegation() {
       default:
         return;
     }
-    await commitSlot(slotIdx, key, strategy, interval, delayMin, delayMax);
+    await commitSlot(slotIdx, key, mod, strategy, interval, delayMin, delayMax);
   });
 }
 
@@ -650,8 +670,8 @@ function setSlotField(slotIdx, field, value) {
   if (el) el.value = value;
 }
 
-async function commitSlot(slotIdx, key, strategy, interval, delayMin, delayMax) {
-  const r = await callApi('api_updateSlot', currentTab, slotIdx, key, strategy, interval, delayMin, delayMax);
+async function commitSlot(slotIdx, key, mod, strategy, interval, delayMin, delayMax) {
+  const r = await callApi('api_updateSlot', currentTab, slotIdx, key, mod, strategy, interval, delayMin, delayMax);
   if (!r.ok) {
     // 失败时把控件恢复成后端实际保存的值（可能是被夹取/拒绝后的结果）
     await reloadState();
@@ -966,7 +986,7 @@ async function applyCapturedKey(target, token, label) {
       const slot = slotAt(target.target.slotIdx);
       if (!slot) return;
       result = await callApi('api_updateSlot', currentTab, target.target.slotIdx, token,
-        slot.strategy, slot.intervalMS, slot.delayMinMS, slot.delayMaxMS);
+        slot.mod || '', slot.strategy, slot.intervalMS, slot.delayMinMS, slot.delayMaxMS);
       break;
     }
     case 'toggle':

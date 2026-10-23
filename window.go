@@ -131,6 +131,9 @@ type skillSlotData struct {
 	Name       string `json:"name"`
 	DefaultKey string `json:"defaultKey"`
 	Key        string `json:"key"`
+	// Mod 是发送该键时要同时按住的修饰键（键名，空表示不按）：
+	// 暗黑4 的强制站立 / 强制移动 / 强制交互都通过它表达。
+	Mod        string `json:"mod"`
 	Strategy   int    `json:"strategy"`
 	IntervalMS int    `json:"intervalMS"`
 	// 延迟区间：DelayMaxMS 是上界（正数在本周期内后延、负数推迟到周期末尾前，0 表示不延迟），
@@ -154,9 +157,12 @@ func defaultSlots() [numSlots]skillSlotData {
 }
 
 type frontendSlot struct {
-	Name        string `json:"name"`
-	Key         string `json:"key"`
-	KeyLabel    string `json:"keyLabel"` // 界面显示名（中文），由 keyitems.go 统一给出
+	Name     string `json:"name"`
+	Key      string `json:"key"`
+	KeyLabel string `json:"keyLabel"` // 界面显示名（中文），由 keyitems.go 统一给出
+	// Mod 是修饰键名（空表示不按），ModLabel 是它的显示名。
+	Mod         string `json:"mod"`
+	ModLabel    string `json:"modLabel"`
 	Strategy    int    `json:"strategy"`
 	IntervalMS  int    `json:"intervalMS"`
 	DelayMaxMS  int    `json:"delayMaxMS"`
@@ -217,7 +223,13 @@ type frontendState struct {
 	ForceStandEnabled  bool                `json:"forceStandEnabled"`
 	ForceStandKey      string              `json:"forceStandKey"`
 	ForceStandKeyLabel string              `json:"forceStandKeyLabel"`
-	TargetProcess      string              `json:"targetProcess"`
+	// ModKeys 是「修饰键」的三个来源键（发送技能时按住）：强制站立 / 强制移动 / 强制交互。
+	ModKeys struct {
+		Stand    string `json:"stand"`
+		Move     string `json:"move"`
+		Interact string `json:"interact"`
+	} `json:"modKeys"`
+	TargetProcess string `json:"targetProcess"`
 	Engine             frontendEngineState `json:"engine"`
 	HUD                frontendHUD         `json:"hud"`
 }
@@ -557,7 +569,7 @@ func (w *mainWindow) initBindings() {
 		return nil
 	})
 
-	bind("api_updateSlot", func(tabIdx, slotIdx int, key string, strategy, interval, delayMin, delayMax int) error {
+	bind("api_updateSlot", func(tabIdx, slotIdx int, key, mod string, strategy, interval, delayMin, delayMax int) error {
 		if tabIdx < 0 || tabIdx >= w.profileCount || slotIdx < 0 || slotIdx >= numSlots {
 			return fmt.Errorf("槽位序号超出范围")
 		}
@@ -571,9 +583,20 @@ func (w *mainWindow) initBindings() {
 		if _, err := keys.Parse(key); err != nil {
 			return fmt.Errorf("槽位按键无效：%v", err)
 		}
+		mod = strings.ToUpper(strings.TrimSpace(mod))
+		if mod != "" {
+			vk, err := keys.Parse(mod)
+			if err != nil {
+				return fmt.Errorf("修饰键无效：%v", err)
+			}
+			if keys.IsMouse(vk) {
+				return fmt.Errorf("修饰键不支持鼠标键（%s），请改用键盘键", keyName(vk))
+			}
+		}
 		slot := &w.profileSlots[tabIdx][slotIdx]
 		prev := *slot
 		slot.Key = key
+		slot.Mod = mod
 		slot.Strategy = strategy
 		slot.IntervalMS = clampInterval(interval, prev.IntervalMS)
 		slot.DelayMaxMS = clampDelay(delayMax)
@@ -996,6 +1019,8 @@ func (w *mainWindow) buildFrontendState() *frontendState {
 				Name:        sd.Name,
 				Key:         sd.Key,
 				KeyLabel:    keyNameOfToken(sd.Key),
+				Mod:         sd.Mod,
+				ModLabel:    keyNameOfToken(sd.Mod),
 				Strategy:    sd.Strategy,
 				IntervalMS:  sd.IntervalMS,
 				DelayMaxMS:  sd.DelayMaxMS,
@@ -1036,6 +1061,13 @@ func (w *mainWindow) buildFrontendState() *frontendState {
 	s.ForceStandEnabled = gk.ForceStandEnabled
 	s.ForceStandKey = w.forceStandKeyName()
 	s.ForceStandKeyLabel = keyNameOfToken(s.ForceStandKey)
+	// 修饰键：站立沿用上面的取值；移动默认未绑定（暗黑4 本来就不绑）；交互默认 F。
+	s.ModKeys.Stand = s.ForceStandKey
+	s.ModKeys.Move = gk.ForceMoveKey
+	s.ModKeys.Interact = gk.ForceInteractKey
+	if s.ModKeys.Interact == "" && w.app.settings.CurrentGame == "d4" {
+		s.ModKeys.Interact = "F"
+	}
 
 	// 运行状态：状态判定与文案统一由 status.go 提供，主窗口与悬浮窗不可能各说一套。
 	foreground := w.app.gameInForeground(snap)
@@ -1292,6 +1324,7 @@ func profileToSlots(prof config.RawProfile) [numSlots]skillSlotData {
 
 		usedSlots[slotIdx] = true
 		slots[slotIdx].Key = targetKey
+		slots[slotIdx].Mod = r.Mod
 		if r.IntervalMS > 0 {
 			slots[slotIdx].IntervalMS = r.IntervalMS
 		}
@@ -1418,12 +1451,14 @@ func slotsToProfile(slots [numSlots]skillSlotData, name string, mode string) con
 			rules = append(rules, config.RawRule{
 				Trigger:  "t",
 				Action:   "hold:" + s.Key,
+				Mod:      s.Mod,
 				Strategy: config.StrategyHold,
 			})
 		case strategySpam:
 			rule := config.RawRule{
 				Trigger:    "t",
 				Action:     "tap:" + s.Key,
+				Mod:        s.Mod,
 				IntervalMS: clampInterval(s.IntervalMS, 20),
 				Strategy:   config.StrategySpam,
 			}
@@ -1439,6 +1474,7 @@ func slotsToProfile(slots [numSlots]skillSlotData, name string, mode string) con
 			rules = append(rules, config.RawRule{
 				Trigger:    "t",
 				Action:     "tap:" + s.Key,
+				Mod:        s.Mod,
 				IntervalMS: clampInterval(s.IntervalMS, 300),
 				Strategy:   config.StrategyBuff,
 			})

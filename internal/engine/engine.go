@@ -338,7 +338,7 @@ func (e *Engine) tickSequentialLocked(now time.Time, foreground bool) {
 		if e.buffGateLocked(st) {
 			continue
 		}
-		e.tapLocked(st.rule.Keys[0])
+		e.tapLocked(st.rule.Keys[0], st.rule.ModVK)
 		e.seqNext = now.Add(e.delayOffsetLocked(st.rule) + time.Duration(st.rule.IntervalMS)*time.Millisecond)
 		return
 	}
@@ -364,14 +364,28 @@ func (e *Engine) tickTapLocked(st *ruleState, now time.Time) {
 		st.nextFire = now.Add(buffResampleDelay)
 		return
 	}
-	e.tapLocked(st.rule.Keys[0])
+	e.tapLocked(st.rule.Keys[0], st.rule.ModVK)
 	st.nextFire = now.Add(time.Duration(st.rule.IntervalMS) * time.Millisecond)
 	st.fireAt = time.Time{}
 }
 
-// tapLocked 合成一次点击。若该键需要强制站立（暗黑3 左键技能）且启用中，
-// 则先按住强制站立键、点完立即释放；玩家自己已按住该键时直接点击、不重复按下。
-func (e *Engine) tapLocked(vk uint16) {
+// tapLocked 合成一次点击。modVK != 0 时先按住该修饰键（强制站立 / 强制移动 / 强制交互），
+// 点完立即释放；否则沿用「左键连点自动站立」的全局设置。
+// 玩家自己已按住修饰键时直接点击，不重复按下，避免抬起时把玩家的按住状态一起松开。
+func (e *Engine) tapLocked(vk, modVK uint16) {
+	if modVK != 0 && !e.state.Pressed(modVK) {
+		if err := e.sender.KeyDown(modVK); err != nil {
+			e.onError(err)
+			return
+		}
+		if err := e.sender.Tap(vk); err != nil {
+			e.onError(err)
+		}
+		if err := e.sender.KeyUp(modVK); err != nil {
+			e.onError(err)
+		}
+		return
+	}
 	if e.forceStandVK != 0 && vk == e.forceStandApply && !e.state.Pressed(e.forceStandVK) {
 		if err := e.sender.KeyDown(e.forceStandVK); err != nil {
 			e.onError(err)
@@ -482,7 +496,7 @@ func (e *Engine) NextDue(now time.Time) time.Time {
 func (e *Engine) activateLocked(st *ruleState, now time.Time) {
 	switch st.rule.Kind {
 	case config.ActionOnce:
-		e.tapLocked(st.rule.Keys[0])
+		e.tapLocked(st.rule.Keys[0], st.rule.ModVK)
 	case config.ActionHold:
 		if err := e.sender.KeyDown(st.rule.Keys[0]); err != nil {
 			e.onError(err)
@@ -508,6 +522,6 @@ func (e *Engine) deactivateLocked(st *ruleState) {
 }
 
 func (e *Engine) fireLocked(st *ruleState, vk uint16, now time.Time) {
-	e.tapLocked(vk)
+	e.tapLocked(vk, st.rule.ModVK)
 	st.nextFire = now.Add(time.Duration(st.rule.IntervalMS) * time.Millisecond)
 }

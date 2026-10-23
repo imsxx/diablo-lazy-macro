@@ -18,9 +18,9 @@ import (
 
 const (
 	// Prefix 是当前版本分享码前缀，字母大小写不敏感；其后为 base64url 编码的紧凑 JSON。
-	Prefix = "DLM6:"
+	Prefix = "DLM7:"
 	// Version 是当前协议版本。
-	Version = 6
+	Version = 7
 
 	maxCodeChars       = 4096
 	maxDecodedBytes    = 3000
@@ -96,6 +96,9 @@ type RawRule struct {
 	// DelayMinMS 是延迟区间的下界（毫秒，非负）：缺省（0）表示与 |d| 相同，即固定延迟。
 	// 与 d 一起表达「每次在 [DelayMinMS, |d|] 之间随机取一个幅度」。
 	DelayMinMS int `json:"dn,omitempty"`
+	// Mod 是发送该键时要同时按住的修饰键（键盘键名，如 SHIFT）。
+	// 对应暗黑4 的强制站立 / 强制移动 / 强制交互这类「按住某键再点击」的操作；留空表示不按。
+	Mod string `json:"mod,omitempty"`
 }
 
 // Parsed 是校验并解析后的可执行形式。
@@ -126,6 +129,8 @@ type ParsedRule struct {
 	// DelayMinMS == 0 表示固定延迟 |DelayMS|。
 	DelayMS    int
 	DelayMinMS int
+	// ModVK 是发送前需要按住的修饰键；0 表示不按。
+	ModVK uint16
 }
 
 // Decode 解析分享码，同时返回原始形态（用于持久化与再导出）与可执行形式。
@@ -360,6 +365,17 @@ func resolveRule(profileNo, ruleNo int, r RawRule) (*ParsedRule, error) {
 
 	if err := resolveRuleTuning(where, r, rule); err != nil {
 		return nil, err
+	}
+	// 修饰键：与「方案切换键」同样的约束——只接受键盘键，鼠标键按住没有意义。
+	if mod := strings.TrimSpace(r.Mod); mod != "" {
+		vk, err := keys.Parse(mod)
+		if err != nil {
+			return nil, fmt.Errorf("%s 的修饰键无效：%v", where, err)
+		}
+		if keys.IsMouse(vk) {
+			return nil, fmt.Errorf("%s 的修饰键不支持鼠标键（%s），请改用键盘键", where, keys.Label(vk))
+		}
+		rule.ModVK = vk
 	}
 	return rule, nil
 }
